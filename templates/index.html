@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cadre Photo</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:      #f0f2f5;
+      --surface: #ffffff;
+      --border:  #e4e6ea;
+      --text:    #1c1e21;
+      --text-2:  #65676b;
+      --blue:    #1877f2;
+      --blue-h:  #166fe5;
+      --green:   #42b883;
+      --red:     #fa3e3e;
+      --purple:  #7c5cbf;
+      --radius:  14px;
+      --shadow:  0 2px 12px rgba(0,0,0,.08);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-icon {
+      width: 32px; height: 32px;
+      background: var(--blue);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+    }
+    .header-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+    .header-count {
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--text-2);
+      background: var(--bg);
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    /* ── Page layout ─────────────────────────────────── */
+    .page {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 800px) {
+      .page { grid-template-columns: 1fr; }
+    }
+    .sidebar { display: flex; flex-direction: column; gap: 16px; }
+    .main    { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Cards ───────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .card-head {
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .card-head h2 {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--text-2);
+    }
+    .card-body { padding: 18px; }
+
+    /* ── Upload zone ─────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-on {
+      border-color: var(--blue);
+      background: #f0f5ff;
+    }
+    .upload-zone .uz-icon { font-size: 30px; margin-bottom: 8px; }
+    .upload-zone p { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+    .upload-zone .uz-btn {
+      display: inline-block;
+      margin-top: 10px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 18px;
+      border-radius: 20px;
+    }
+    .upload-zone .uz-btn:hover { background: var(--blue-h); }
+    .upload-progress {
+      margin-top: 10px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      display: none;
+    }
+    .upload-progress-bar {
+      height: 100%;
+      background: var(--blue);
+      animation: indeterminate 1.2s infinite;
+    }
+    @keyframes indeterminate {
+      0%   { transform: translateX(-100%); width: 50%; }
+      100% { transform: translateX(300%);  width: 50%; }
+    }
+    #fileInput { display: none; }
+
+    /* ── Now playing ─────────────────────────────────── */
+    .now-playing {
+      display: none;
+      background: #f0f5ff;
+      border: 1px solid #c8d8f8;
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-size: 13px;
+      color: var(--blue);
+      margin-bottom: 14px;
+      align-items: center;
+      gap: 8px;
+    }
+    .now-playing.show { display: flex; }
+    .np-dot {
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+
+    /* ── Controls ────────────────────────────────────── */
+    .ctrl-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .ctrl-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 11px 10px;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter .15s, transform .1s;
+    }
+    .ctrl-btn:hover  { filter: brightness(.93); }
+    .ctrl-btn:active { transform: scale(.97); }
+    .ctrl-restart { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .ctrl-next    { background: var(--blue);  color: #fff; grid-column: span 2; }
+    .ctrl-stop    { background: var(--red);   color: #fff; }
+    .ctrl-all     { background: var(--green); color: #fff; grid-column: span 2; }
+
+    /* ── Settings ────────────────────────────────────── */
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .setting-row:last-child  { border-bottom: none; padding-bottom: 0; }
+    .setting-row:first-child { padding-top: 0; }
+    .setting-label { font-size: 14px; font-weight: 500; }
+    .setting-hint  { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+    .num-input {
+      width: 68px;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: center;
+      background: var(--bg);
+      transition: border-color .2s;
+    }
+    .num-input:focus { outline: none; border-color: var(--blue); background: #fff; }
+
+    /* iOS-style toggle */
+    .tog { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+    .tog input { display: none; }
+    .tog-track {
+      position: absolute; inset: 0;
+      background: #ccc;
+      border-radius: 26px;
+      cursor: pointer;
+      transition: background .25s;
+    }
+    .tog-track::after {
+      content: '';
+      position: absolute;
+      width: 22px; height: 22px;
+      background: #fff;
+      border-radius: 50%;
+      top: 2px; left: 2px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.25);
+      transition: transform .25s;
+    }
+    .tog input:checked + .tog-track { background: var(--green); }
+    .tog input:checked + .tog-track::after { transform: translateX(18px); }
+
+    /* ── Info notes ──────────────────────────────────── */
+    .note {
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .note-warn { background: #fff8e6; color: #7a5200; border: 1px solid #f5d67a; }
+    .note-info { background: #eef4ff; color: #2255c4; border: 1px solid #c0d4f8; }
+
+    /* ── Gallery ─────────────────────────────────────── */
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+      gap: 10px;
+    }
+    .gallery-item {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--bg);
+      aspect-ratio: 1;
+      border: 2px solid transparent;
+      transition: box-shadow .2s, border-color .2s, transform .15s;
+    }
+    .gallery-item:hover      { box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+    .gallery-item.selected   { border-color: var(--blue); }
+    .gallery-item.draggable  { cursor: grab; }
+    .gallery-item.dragging   { opacity: .35; transform: scale(.95); cursor: grabbing; }
+    .gallery-item.drag-over  {
+      border-color: var(--blue);
+      transform: scale(1.04);
+      box-shadow: 0 0 0 3px rgba(24,119,242,.25);
+    }
+    .gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    /* Hover overlay */
+    .item-overlay {
+      position: absolute; inset: 0;
+      background: transparent;
+      transition: background .2s;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .gallery-item:hover .item-overlay { background: rgba(0,0,0,.28); }
+
+    .item-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 7px;
+      opacity: 0;
+      transition: opacity .2s;
+    }
+    .gallery-item:hover .item-actions { opacity: 1; }
+
+    .ia-btn {
+      width: 30px; height: 30px;
+      border: none; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 13px;
+      backdrop-filter: blur(6px);
+      transition: transform .15s;
+    }
+    .ia-btn:hover { transform: scale(1.12); }
+    .ia-play { background: rgba(255,255,255,.92); color: var(--blue); }
+    .ia-del  { background: rgba(250,62,62,.88);   color: #fff; }
+
+    .drag-pip {
+      position: absolute; top: 7px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.45);
+      color: #fff; border-radius: 4px;
+      padding: 1px 6px; font-size: 12px;
+      letter-spacing: 3px; pointer-events: none;
+      opacity: 0; transition: opacity .2s;
+    }
+    .gallery-item:hover .drag-pip { opacity: 1; }
+
+    /* Bottom info bar */
+    .item-foot {
+      padding: 6px 8px;
+      background: linear-gradient(transparent, rgba(0,0,0,.65));
+      display: flex; align-items: center; gap: 4px;
+    }
+    .item-name {
+      font-size: 10px; color: rgba(255,255,255,.88);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+    }
+    .vid-badge {
+      background: var(--purple); color: #fff;
+      font-size: 9px; font-weight: 700;
+      padding: 2px 5px; border-radius: 3px;
+      letter-spacing: .4px; white-space: nowrap;
+    }
+    .dur-pill {
+      display: flex; align-items: center; gap: 2px;
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 4px; padding: 1px 5px;
+    }
+    .dur-pill input {
+      width: 32px; background: transparent; border: none;
+      color: #fff; font-size: 10px; text-align: center; padding: 0;
+    }
+    .dur-pill input:focus { outline: none; }
+    .dur-pill input::placeholder { color: rgba(255,255,255,.5); }
+    .dur-pill span { font-size: 10px; color: rgba(255,255,255,.65); }
+
+    /* ── Toast ───────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: #1c1e21;
+      color: #fff;
+      font-size: 13px; font-weight: 500;
+      padding: 11px 16px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.3);
+      transform: translateY(70px); opacity: 0;
+      transition: transform .3s cubic-bezier(.34,1.56,.64,1), opacity .3s;
+      pointer-events: none; z-index: 999; max-width: 280px;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-icon">🖼</div>
+    <span class="header-title">Cadre Photo</span>
+    <span class="header-count" id="headerCount">0 média</span>
+  </header>
+
+  <div class="page">
+
+    <!-- ── Sidebar ────────────────────────────────────── -->
+    <aside class="sidebar">
+
+      <!-- Upload -->
+      <div class="card">
+        <div class="card-head"><h2>Ajouter des médias</h2></div>
+        <div class="card-body">
+          <div class="upload-zone" id="uploadZone"
+               onclick="document.getElementById('fileInput').click()">
+            <div class="uz-icon">☁️</div>
+            <p>Glissez vos photos &amp; vidéos ici<br>ou cliquez pour choisir</p>
+            <span class="uz-btn">Parcourir…</span>
+          </div>
+          <div class="upload-progress" id="uploadProgress">
+            <div class="upload-progress-bar"></div>
+          </div>
+          <input type="file" id="fileInput" multiple accept="image/*,video/*">
+        </div>
+      </div>
+
+      <!-- Lecture -->
+      <div class="card">
+        <div class="card-head"><h2>Lecture</h2></div>
+        <div class="card-body">
+          <div class="now-playing" id="nowPlaying">
+            <span class="np-dot"></span>
+            <span>Affichage unique : <strong id="nowPlayingName"></strong></span>
+          </div>
+          <div class="ctrl-grid">
+            <button class="ctrl-btn ctrl-restart" onclick="control('restart')">↻ Redémarrer</button>
+            <button class="ctrl-btn ctrl-stop"    onclick="control('stop')">⏹ Arrêter</button>
+            <button class="ctrl-btn ctrl-next"    onclick="control('next')">⏭ Fichier suivant</button>
+            <button class="ctrl-btn ctrl-all" id="playAllBtn" style="display:none"
+                    onclick="playAll()">▶ Tous les médias</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paramètres -->
+      <div class="card">
+        <div class="card-head"><h2>Paramètres</h2></div>
+        <div class="card-body">
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Durée par défaut</div>
+              <div class="setting-hint">Secondes par image</div>
+            </div>
+            <input type="number" class="num-input" id="duration" min="1" max="300"
+                   onchange="updateConfig()">
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Mode aléatoire</div>
+              <div class="setting-hint">Mélanger l'ordre</div>
+            </div>
+            <label class="tog">
+              <input type="checkbox" id="shuffle" onchange="updateConfig()">
+              <span class="tog-track"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Boucle infinie</div>
+              <div class="setting-hint">Recommencer en boucle</div>
+            </div>
+            <label class="tog">
+              <input type="checkbox" id="loop" onchange="updateConfig()">
+              <span class="tog-track"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── Médiathèque ─────────────────────────────────── -->
+    <main class="main">
+      <div class="card">
+        <div class="card-head">
+          <h2>Médiathèque</h2>
+          <span style="font-size:12px; color:var(--text-2)" id="galleryCount">0 fichier</span>
+        </div>
+        <div class="card-body">
+          <div class="note note-warn" id="shuffleNote" style="display:none">
+            Mode aléatoire activé — désactivez-le dans les paramètres pour personnaliser
+            l'ordre par glisser-déposer.
+          </div>
+          <div class="note note-info" id="orderNote" style="display:none">
+            Glissez-déposez les vignettes pour définir l'ordre de lecture.
+            Chaque image dispose d'un champ de durée individuel.
+          </div>
+          <div class="gallery" id="gallery"></div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let _files     = [];
+    let isDragging = false;
+    let dragSrcEl  = null;
+    let toastTimer = null;
+
+    const VIDEO_EXT = /\.(mp4|avi|mkv|mov|webm|m4v)$/i;
+    const isVideo = f => VIDEO_EXT.test(f);
+
+    // ── Toast ─────────────────────────────────────────────
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ── Config ────────────────────────────────────────────
+    async function loadConfig() {
+      const cfg = await fetch('/api/config').then(r => r.json());
+      document.getElementById('duration').value    = cfg.image_duration;
+      document.getElementById('shuffle').checked   = cfg.shuffle;
+      document.getElementById('loop').checked      = cfg.loop;
+      refreshNowPlaying(cfg);
+    }
+
+    function refreshNowPlaying(cfg) {
+      const np = document.getElementById('nowPlaying');
+      if (cfg.single_file_mode && cfg.selected_file) {
+        np.classList.add('show');
+        document.getElementById('nowPlayingName').textContent = cfg.selected_file;
+        document.getElementById('playAllBtn').style.display = 'block';
+      } else {
+        np.classList.remove('show');
+        document.getElementById('playAllBtn').style.display = 'none';
+      }
+    }
+
+    async function updateConfig() {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image_duration: parseInt(document.getElementById('duration').value),
+          shuffle: document.getElementById('shuffle').checked,
+          loop:    document.getElementById('loop').checked,
+        }),
+      });
+      showToast('Paramètres enregistrés');
+      loadGallery();
+    }
+
+    // ── Gallery ───────────────────────────────────────────
+    async function loadGallery() {
+      if (isDragging) return;
+
+      const [files, cfg] = await Promise.all([
+        fetch('/api/files').then(r => r.json()),
+        fetch('/api/config').then(r => r.json()),
+      ]);
+
+      // Sort by custom order
+      let sorted = [...files];
+      if (cfg.file_order && cfg.file_order.length) {
+        const om = Object.fromEntries(cfg.file_order.map((f, i) => [f, i]));
+        sorted.sort((a, b) => {
+          const ai = om[a] ?? 1e9;
+          const bi = om[b] ?? 1e9;
+          return ai !== bi ? ai - bi : a.localeCompare(b);
+        });
+      }
+      _files = sorted;
+
+      const n = files.length;
+      document.getElementById('headerCount').textContent  = n + ' média' + (n > 1 ? 's' : '');
+      document.getElementById('galleryCount').textContent = n + ' fichier' + (n > 1 ? 's' : '');
+      document.getElementById('shuffleNote').style.display = cfg.shuffle ? 'block' : 'none';
+      document.getElementById('orderNote').style.display   = cfg.shuffle ? 'none'  : 'block';
+      refreshNowPlaying(cfg);
+
+      const draggable = !cfg.shuffle;
+      document.getElementById('gallery').innerHTML = sorted.map((file, i) => {
+        const sel       = cfg.single_file_mode && cfg.selected_file === file;
+        const video     = isVideo(file);
+        const customDur = cfg.file_durations?.[file] ?? '';
+        const defDur    = cfg.image_duration;
+        const safeFile  = file.replace(/"/g, '&quot;');
+
+        return `
+          <div class="gallery-item${sel ? ' selected' : ''}${draggable ? ' draggable' : ''}"
+               data-filename="${safeFile}"
+               ${draggable ? 'draggable="true" ondragstart="dragStart(event)"' : ''}
+               ondragover="dragOver(event)"
+               ondragleave="dragLeave(event)"
+               ondrop="drop(event)"
+               ondragend="dragEnd(event)">
+            <img src="/media/${encodeURIComponent(file)}"
+                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%23e4e6ea%22 width=%221%22 height=%221%22/></svg>'">
+            ${draggable ? '<div class="drag-pip">&#8942;&#8942;</div>' : ''}
+            <div class="item-overlay">
+              <div class="item-actions">
+                <button class="ia-btn ia-play" onclick="_gPlay(${i})"   title="Afficher uniquement">&#9654;</button>
+                <button class="ia-btn ia-del"  onclick="_gDelete(${i})" title="Supprimer">&#10005;</button>
+              </div>
+              <div class="item-foot">
+                <span class="item-name">${file}</span>
+                ${video
+                  ? '<span class="vid-badge">VIDEO</span>'
+                  : `<div class="dur-pill" onclick="event.stopPropagation()">
+                       <input type="number"
+                              value="${customDur}"
+                              placeholder="${defDur}"
+                              min="1" max="300"
+                              title="Durée personnalisée (vide = défaut)"
+                              onchange="_gSetDur(${i}, this.value)"
+                              onclick="event.stopPropagation()">
+                       <span>s</span>
+                     </div>`
+                }
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Index-based proxies (avoids filename escaping in inline handlers)
+    const _gPlay   = i => playSingle(_files[i]);
+    const _gDelete = i => deleteFile(_files[i]);
+    const _gSetDur = (i, v) => setFileDuration(_files[i], v);
+
+    // ── Upload ────────────────────────────────────────────
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput  = document.getElementById('fileInput');
+
+    uploadZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      uploadZone.classList.add('drag-on');
+    });
+    uploadZone.addEventListener('dragleave', e => {
+      if (!uploadZone.contains(e.relatedTarget)) uploadZone.classList.remove('drag-on');
+    });
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-on');
+      if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) uploadFiles(fileInput.files);
+    });
+
+    async function uploadFiles(files) {
+      const prog = document.getElementById('uploadProgress');
+      prog.style.display = 'block';
+      const fd = new FormData();
+      for (const f of files) fd.append('files', f);
+      const res = await fetch('/', { method: 'POST', body: fd });
+      prog.style.display = 'none';
+      fileInput.value = '';
+      if (res.ok) {
+        loadGallery();
+        const n = files.length;
+        showToast(n + ' fichier' + (n > 1 ? 's' : '') + ' envoyé' + (n > 1 ? 's' : ''));
+      }
+    }
+
+    // ── Gallery drag & drop ───────────────────────────────
+    function dragStart(e) {
+      isDragging = true;
+      dragSrcEl  = e.currentTarget;
+      e.dataTransfer.effectAllowed = 'move';
+      e.currentTarget.classList.add('dragging');
+    }
+    function dragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (e.currentTarget !== dragSrcEl) e.currentTarget.classList.add('drag-over');
+    }
+    function dragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+    function dragEnd(e) {
+      isDragging = false;
+      document.querySelectorAll('.gallery-item').forEach(el =>
+        el.classList.remove('drag-over', 'dragging'));
+    }
+    function drop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const target = e.currentTarget;
+      target.classList.remove('drag-over');
+      if (!dragSrcEl || dragSrcEl === target) { isDragging = false; return; }
+
+      const items = [...document.querySelectorAll('.gallery-item')];
+      const si = items.indexOf(dragSrcEl);
+      const di = items.indexOf(target);
+      const g  = document.getElementById('gallery');
+      if (si < di) g.insertBefore(dragSrcEl, target.nextSibling);
+      else         g.insertBefore(dragSrcEl, target);
+
+      isDragging = false;
+      saveOrder();
+    }
+    async function saveOrder() {
+      const order = [...document.querySelectorAll('.gallery-item')]
+                      .map(el => el.dataset.filename);
+      _files = order;
+      await fetch('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      });
+      showToast('Ordre de lecture mis à jour');
+    }
+
+    // ── File actions ──────────────────────────────────────
+    async function setFileDuration(filename, value) {
+      const duration = value ? parseInt(value) : null;
+      await fetch('/api/file-duration/' + encodeURIComponent(filename), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration }),
+      });
+      showToast(duration ? `${filename} : ${duration}s` : 'Durée par défaut rétablie');
+    }
+
+    async function playSingle(filename) {
+      await fetch('/api/play-single/' + encodeURIComponent(filename), { method: 'POST' });
+      loadGallery();
+      loadConfig();
+      showToast('Affichage de ' + filename);
+    }
+    async function playAll() {
+      await fetch('/api/play-all', { method: 'POST' });
+      loadGallery();
+      loadConfig();
+      showToast('Lecture de toute la médiathèque');
+    }
+    async function deleteFile(filename) {
+      if (!confirm('Supprimer « ' + filename + ' » ?')) return;
+      await fetch('/api/delete/' + encodeURIComponent(filename), { method: 'DELETE' });
+      loadGallery();
+      showToast(filename + ' supprimé');
+    }
+    async function control(action) {
+      const res  = await fetch('/api/control/' + action, { method: 'POST' });
+      const data = await res.json();
+      showToast(data.message);
+    }
+
+    // ── Init ──────────────────────────────────────────────
+    loadConfig();
+    loadGallery();
+    setInterval(() => { if (!isDragging) loadGallery(); }, 5000);
+  </script>
+</body>
+</html>

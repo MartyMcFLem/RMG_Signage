@@ -1,0 +1,41 @@
+inloc@LABL18A:~ $ DISPLAY=:0 mpv /home/pi/cadre/253.jpg
+● Image  --vid=1  (mjpeg 5386x8079)
+VO: [gpu] 5386x8079 yuv444p
+[vo/gpu/libplacebo] Validation failed: params->w <= gpu->limits.max_tex_2d_dim (../src/gpu.c:224)
+[vo/gpu/libplacebo]   Backtrace:
+[vo/gpu/libplacebo]     #0  /lib/aarch64-linux-gnu/libplacebo.so.349(pl_tex_create+0x2f0) [0x7f84e60038]
+[vo/gpu/libplacebo]     #1  mpv(+0x13abb0) [0x556752abb0]
+[vo/gpu/libplacebo]     #2  mpv(+0x124c7c) [0x5567514c7c]
+[vo/gpu/libplacebo]     #3  mpv(+0x12a840) [0x556751a840]
+[vo/gpu/libplacebo]     #4  mpv(+0x131150) [0x5567521150]
+[vo/gpu/libplacebo]     #5  mpv(+0x12e9f0) [0x556751e9f0]
+[vo/gpu/libplacebo]     #6  mpv(+0xafee8) [0x556749fee8]
+[vo/gpu/libplacebo]     #7  mpv(+0x1301c4) [0x55675201c4]
+[vo/gpu/libplacebo]     #8  /lib/aarch64-linux-gnu/libc.so.6(+0x85ef8) [0x7f837a5ef8]
+[vo/gpu/libplacebo]     #9  /lib/aarch64-linux-gnu/libc.so.6(+0xede0c) [0x7f8380de0c]
+[vo/gpu/libplacebo] Validation failed: params->w <= gpu->limits.max_tex_2d_dim (../src/gpu.c:224)
+[vo/gpu/libplacebo]   Backtrace:
+[vo/gpu/libplacebo]     #0  /lib/aarch64-linux-gnu/libplacebo.so.349(pl_tex_create+0x2f0) [0x7f84e60038]
+[vo/gpu/libplacebo]     #1  mpv(+0x13abb0) [0x556752abb0]
+[vo/gpu/libplacebo]     #2  mpv(+0x124c7c) [0x5567514c7c]
+[vo/gpu/libplacebo]     #3  mpv(+0x12a840) [0x556751a840]
+[vo/gpu/libplacebo]     #4  mpv(+0x131150) [0x5567521150]
+[vo/gpu/libplacebo]     #5  mpv(+0x12e9f0) [0x556751e9f0]
+[vo/gpu/libplacebo]     #6  mpv(+0xafee8) [0x556749fee8]
+[vo/gpu/libplacebo]     #7  mpv(+0x1301c4) [0x55675201c4]
+[vo/gpu/libplacebo]     #8  /lib/aarch64-linux-gnu/libc.so.6(+0x85ef8) [0x7f837a5ef8]
+[vo/gpu/libplacebo]     #9  /lib/aarch64-linux-gnu/libc.so.6(+0xede0c) [0x7f8380de0c]
+[vo/gpu/libplacebo] Validation failed: params->w <= gpu->limits.max_tex_2d_dim (../src/gpu.c:224)
+[vo/gpu/libplacebo]   Backtrace:
+[vo/gpu/libplacebo]     #0  /lib/aarch64-linux-gnu/libplacebo.so.349(pl_tex_create+0x2f0) [0x7f84e60038]
+[vo/gpu/libplacebo]     #1  mpv(+0x13abb0) [0x556752abb0]
+[vo/gpu/libplacebo]     #2  mpv(+0x124c7c) [0x5567514c7c]
+[vo/gpu/libplacebo]     #3  mpv(+0x12a840) [0x556751a840]
+[vo/gpu/libplacebo]     #4  mpv(+0x131150) [0x5567521150]
+[vo/gpu/libplacebo]     #5  mpv(+0x12e9f0) [0x556751e9f0]
+[vo/gpu/libplacebo]     #6  mpv(+0xafee8) [0x556749fee8]
+[vo/gpu/libplacebo]     #7  mpv(+0x1301c4) [0x55675201c4]
+[vo/gpu/libplacebo]     #8  /lib/aarch64-linux-gnu/libc.so.6(+0x85ef8) [0x7f837a5ef8]
+[vo/gpu/libplacebo]     #9  /lib/aarch64-linux-gnu/libc.so.6(+0xede0c) [0x7f8380de0c]
+V: 00:00:00 / 00:00:00 (0%)
+Exiting... (Quit)

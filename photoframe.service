@@ -1,0 +1,25 @@
+[Unit]
+Description=Cadre Photo Numérique - Flask & MPV
+After=graphical.target network.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/PhotoFrame
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/pi/.Xauthority"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStartPre=/bin/bash -c 'mkdir -p /home/pi/cadre'
+ExecStart=/bin/bash /home/pi/PhotoFrame/start_photoframe.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=photoframe
+TimeoutStartSec=120
+
+[Install]
+WantedBy=graphical.target
