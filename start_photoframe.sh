@@ -12,15 +12,11 @@ log() {
 log "=== Démarrage du service PhotoFrame ==="
 
 # Attendre que X11 ou Wayland soit prêt
-log "Démarrage immédiat (ne bloque pas l'apparition du bureau)"
-# Nous n'attendons plus X11/Wayland ici, car MPV peut utiliser --vo=drm
-# et prendre l'affichage avant que le gestionnaire de fenêtre ne soit visible.
-if [ -z "$DISPLAY" ]; then
-    DISPLAY=":0"
-    export DISPLAY
-fi
-
-log "DISPLAY=$DISPLAY"
+log "Démarrage en mode headless / kiosque (pas d'X par défaut)"
+# Pour Raspberry Pi OS Lite (sans X), forçons l'absence de DISPLAY
+# afin que MPV choisisse un backend framebuffer/DRM (--vo=drm)
+unset DISPLAY || true
+log "DISPLAY unset"
 log "USER=$USER"
 log "HOME=$HOME"
 log "PATH=$PATH"
