@@ -1,7 +1,7 @@
 [Unit]
 Description=Cadre Photo Numérique - Flask & MPV
-After=graphical.target network.target display-manager.service systemd-user-sessions.service
-Wants=graphical.target
+After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
@@ -26,4 +26,4 @@ SyslogIdentifier=photoframe
 TimeoutStartSec=180
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target

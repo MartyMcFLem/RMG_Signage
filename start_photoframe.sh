@@ -12,37 +12,11 @@ log() {
 log "=== Démarrage du service PhotoFrame ==="
 
 # Attendre que X11 ou Wayland soit prêt
-log "Attente du serveur graphique..."
-DISPLAY_READY=0
-for i in {1..60}; do
-    # X11
-    if [ -S /tmp/.X11-unix/X0 ] || [ -S /tmp/.X11-unix/X1 ]; then
-        log "Serveur X11 détecté"
-        DISPLAY_READY=1
-        break
-    fi
-    # Wayland (Raspberry Pi OS Bookworm utilise Wayland par défaut)
-    if [ -S /run/user/1000/wayland-0 ] || [ -S /run/user/1000/wayland-1 ]; then
-        log "Serveur Wayland détecté"
-        DISPLAY_READY=1
-        break
-    fi
-    sleep 1
-done
-
-if [ "$DISPLAY_READY" -eq 0 ]; then
-    log "ERREUR: Serveur graphique non trouvé après 60 secondes"
-fi
-sleep 2
-
-# Vérifier que DISPLAY est défini
+log "Démarrage immédiat (ne bloque pas l'apparition du bureau)"
+# Nous n'attendons plus X11/Wayland ici, car MPV peut utiliser --vo=drm
+# et prendre l'affichage avant que le gestionnaire de fenêtre ne soit visible.
 if [ -z "$DISPLAY" ]; then
-    log "DISPLAY non défini, détection..."
-    # Essayer de détecter le display
-    DISPLAY=$(ps aux 2>/dev/null | grep -m1 'Xvfb\|/X\|Xwayland' | grep -oP ':\d+' | head -1)
-    if [ -z "$DISPLAY" ]; then
-        DISPLAY=":0"
-    fi
+    DISPLAY=":0"
     export DISPLAY
 fi
 
