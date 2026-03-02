@@ -151,6 +151,28 @@
     }
     #fileInput { display: none; }
 
+    /* ── MPV status bar ─────────────────────────────── */
+    .mpv-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 14px;
+      border: 1px solid;
+    }
+    .mpv-status.ok   { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+    .mpv-status.warn { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+    .mpv-status.err  { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+    .mpv-status .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .ok   .dot { background: #22c55e; animation: pulse 2s infinite; }
+    .warn .dot { background: #f97316; }
+    .err  .dot { background: var(--red); }
+
     /* ── Now playing ─────────────────────────────────── */
     .now-playing {
       display: none;
@@ -377,8 +399,12 @@
 </head>
 <body>
 
+
   <header class="header">
-    <div class="header-icon">🖼</div>
+    <div class="header-icon">
+      <img id="logoImg" src="/static/logo.png" alt="Logo" style="width:32px;height:32px;object-fit:contain;display:block;" onerror="this.style.display='none'">
+      <span id="logoFallback" style="display:none;">🖼</span>
+    </div>
     <span class="header-title">Cadre Photo</span>
     <span class="header-count" id="headerCount">0 média</span>
   </header>
@@ -409,6 +435,10 @@
       <div class="card">
         <div class="card-head"><h2>Lecture</h2></div>
         <div class="card-body">
+          <div class="mpv-status warn" id="mpvStatus">
+            <span class="dot"></span>
+            <span id="mpvStatusText">Vérification…</span>
+          </div>
           <div class="now-playing" id="nowPlaying">
             <span class="np-dot"></span>
             <span>Affichage unique : <strong id="nowPlayingName"></strong></span>
@@ -455,8 +485,48 @@
               <span class="tog-track"></span>
             </label>
           </div>
+          <hr style="margin:16px 0;">
+          <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+            <div class="setting-label">Logo du cadre</div>
+            <form id="logoForm" enctype="multipart/form-data" style="width:100%;display:flex;gap:8px;align-items:center;" onsubmit="uploadLogo(event)">
+              <input type="file" id="logoInput" name="logo" accept="image/*" style="flex:1;">
+              <button type="submit" class="uz-btn">Changer le logo</button>
+            </form>
+            <div class="setting-hint">Format recommandé : PNG carré, 32x32 ou plus</div>
+          </div>
         </div>
       </div>
+  <script>
+    // Logo fallback if image not found
+    window.addEventListener('DOMContentLoaded', function() {
+      var img = document.getElementById('logoImg');
+      var fallback = document.getElementById('logoFallback');
+      img.onerror = function() {
+        img.style.display = 'none';
+        fallback.style.display = 'block';
+      };
+    });
+
+    // Upload logo
+    function uploadLogo(e) {
+      e.preventDefault();
+      var form = document.getElementById('logoForm');
+      var data = new FormData(form);
+      fetch('/api/upload_logo', {
+        method: 'POST',
+        body: data
+      })
+      .then(r => {
+        if (!r.ok) throw new Error('Erreur lors de l\'upload');
+        return r.json();
+      })
+      .then(res => {
+        showToast('Logo mis à jour !');
+        document.getElementById('logoImg').src = '/static/logo.png?' + Date.now(); // force refresh
+      })
+      .catch(() => showToast('Erreur lors de l\'upload du logo.'));
+    }
+  </script>
 
     </aside>
 

@@ -125,6 +125,7 @@ def get_mpv_cmd():
     os.makedirs(mpv_conf_dir, exist_ok=True)
 
     lua_script = generate_lua_script()
+    lua_script = lua_script if os.path.exists(lua_script) else None
 
     mpv_conf = os.path.join(mpv_conf_dir, "mpv.conf")
     try:
@@ -143,8 +144,11 @@ def get_mpv_cmd():
     if config.get('single_file_mode') and config.get('selected_file'):
         selected_path = os.path.join(MEDIA_DIR, config['selected_file'])
         if os.path.exists(selected_path):
-            return [MPV_BINARY, f"--config-dir={mpv_conf_dir}",
-                    f"--script={lua_script}", "--loop-file=inf", selected_path]
+            cmd_single = [MPV_BINARY, f"--config-dir={mpv_conf_dir}"]
+            if lua_script:
+                cmd_single.append(f"--script={lua_script}")
+            cmd_single += ["--loop-file=inf", selected_path]
+            return cmd_single
 
     # Mode playlist
     try:
@@ -166,7 +170,9 @@ def get_mpv_cmd():
     else:
         final_files = sorted(all_files)
 
-    cmd = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--script={lua_script}"]
+    cmd = [MPV_BINARY, f"--config-dir={mpv_conf_dir}"]
+    if lua_script:
+        cmd.append(f"--script={lua_script}")
     if config['loop']:
         cmd.append("--loop-playlist=inf")
     if config['shuffle']:
@@ -176,7 +182,30 @@ def get_mpv_cmd():
 
 
 # === FLASK APP ===
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
+
+# Endpoint pour upload du logo
+@app.route('/api/upload_logo', methods=['POST'])
+def upload_logo():
+    logo_file = request.files.get('logo')
+    if not logo_file or logo_file.filename == '':
+        return jsonify({'error': 'Aucun fichier'}), 400
+    # Vérifier extension
+    ext = os.path.splitext(logo_file.filename)[1].lower()
+    if ext not in ['.png', '.jpg', '.jpeg', '.gif', '.webp']:
+        return jsonify({'error': 'Format non supporté'}), 400
+    # Créer dossier static si besoin
+    static_dir = os.path.join(os.path.dirname(__file__), 'static')
+    os.makedirs(static_dir, exist_ok=True)
+    logo_path = os.path.join(static_dir, 'logo.png')
+    logo_file.save(logo_path)
+    return jsonify({'success': True})
+
+# Servir le logo (optionnel, Flask le fait déjà via static/)
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    static_dir = os.path.join(os.path.dirname(__file__), 'static')
+    return send_from_directory(static_dir, filename)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -193,6 +222,22 @@ def upload():
 
 
 # === API ENDPOINTS ===
+
+@app.route("/api/status")
+def get_status():
+    """Retourne l'état actuel de mpv"""
+    running = mpv_process is not None and mpv_process.poll() is None
+    try:
+        media_count = len([f for f in os.listdir(MEDIA_DIR)
+                           if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)])
+    except Exception:
+        media_count = 0
+    return jsonify({
+        "mpv_running": running,
+        "media_count": media_count,
+        "media_dir": MEDIA_DIR,
+    })
+
 
 @app.route("/api/files")
 def list_files():
@@ -359,7 +404,7 @@ def start_flask():
 def start_mpv():
     """Lance MPV avec la config actuelle"""
     global mpv_process
-    time.sleep(3)
+    time.sleep(1)
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
@@ -378,7 +423,10 @@ def start_mpv():
 
     extra_list = shlex.split(MPV_EXTRA_ARGS) if MPV_EXTRA_ARGS else []
     user_has_vo = any(a.startswith("--vo=") for a in extra_list)
-    vo_candidates = [[]] if user_has_vo else [["--vo=drm"], ["--vo=opengl"], ["--vo=sdl"]]
+    # --vo=gpu : backend moderne, détecte automatiquement X11 ou Wayland
+    # --vo=drm : framebuffer direct (sans serveur graphique)
+    # --vo=sdl : fallback universel
+    vo_candidates = [[]] if user_has_vo else [["--vo=gpu"], ["--vo=drm"], ["--vo=sdl"]]
 
     last_exception = None
     for vo_args in vo_candidates:

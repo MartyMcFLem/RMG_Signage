@@ -11,16 +11,29 @@ log() {
 
 log "=== Démarrage du service PhotoFrame ==="
 
-# Attendre que X11/Wayland soit prêt (augmentez si nécessaire)
+# Attendre que X11 ou Wayland soit prêt
 log "Attente du serveur graphique..."
-for i in {1..30}; do
+DISPLAY_READY=0
+for i in {1..60}; do
+    # X11
     if [ -S /tmp/.X11-unix/X0 ] || [ -S /tmp/.X11-unix/X1 ]; then
-        log "Serveur graphique détecté"
+        log "Serveur X11 détecté"
+        DISPLAY_READY=1
+        break
+    fi
+    # Wayland (Raspberry Pi OS Bookworm utilise Wayland par défaut)
+    if [ -S /run/user/1000/wayland-0 ] || [ -S /run/user/1000/wayland-1 ]; then
+        log "Serveur Wayland détecté"
+        DISPLAY_READY=1
         break
     fi
     sleep 1
 done
-sleep 5
+
+if [ "$DISPLAY_READY" -eq 0 ]; then
+    log "ERREUR: Serveur graphique non trouvé après 60 secondes"
+fi
+sleep 2
 
 # Vérifier que DISPLAY est défini
 if [ -z "$DISPLAY" ]; then
