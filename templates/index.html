@@ -22,6 +22,22 @@
       --shadow:  0 2px 12px rgba(0,0,0,.08);
     }
 
+    /* Dark mode variables */
+    .dark {
+      --bg:      #0b0f12;
+      --surface: #0f1720;
+      --border:  #1f2933;
+      --text:    #e6eef8;
+      --text-2:  #9aa4b2;
+      --blue:    #3b82f6;
+      --blue-h:  #2563eb;
+      --green:   #34d399;
+      --red:     #fb7185;
+      --purple:  #8b5cf6;
+      --radius:  14px;
+      --shadow:  0 2px 12px rgba(0,0,0,.5);
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
       background: var(--bg);
@@ -44,7 +60,7 @@
     }
     .header-icon {
       width: 32px; height: 32px;
-      background: var(--blue);
+      background: transparent;
       border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
       font-size: 17px;
@@ -438,7 +454,7 @@
         <div class="card-body">
           <div class="mpv-status warn" id="mpvStatus">
             <span class="dot"></span>
-            <span id="mpvStatusText">Vérification…</span>
+            <span id="mpvStatusText"></span>
           </div>
           <div class="now-playing" id="nowPlaying">
             <span class="np-dot"></span>
@@ -483,6 +499,16 @@
             </div>
             <label class="tog">
               <input type="checkbox" id="loop" onchange="updateConfig()">
+              <span class="tog-track"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Mode sombre</div>
+              <div class="setting-hint">Activer le thème sombre</div>
+            </div>
+            <label class="tog">
+              <input type="checkbox" id="darkMode" onchange="updateConfig()">
               <span class="tog-track"></span>
             </label>
           </div>
@@ -555,7 +581,15 @@
       document.getElementById('duration').value    = cfg.image_duration;
       document.getElementById('shuffle').checked   = cfg.shuffle;
       document.getElementById('loop').checked      = cfg.loop;
+      // dark mode
+      if (document.getElementById('darkMode')) {
+        document.getElementById('darkMode').checked = !!cfg.dark_mode;
+        applyDarkMode(!!cfg.dark_mode);
+      }
       refreshNowPlaying(cfg);
+      // hide mpv status badge; confirmations use toasts
+      const mpv = document.getElementById('mpvStatus');
+      if (mpv) mpv.style.display = 'none';
     }
 
     function refreshNowPlaying(cfg) {
@@ -571,17 +605,24 @@
     }
 
     async function updateConfig() {
+      const payload = {
+        image_duration: parseInt(document.getElementById('duration').value),
+        shuffle: document.getElementById('shuffle').checked,
+        loop:    document.getElementById('loop').checked,
+      };
+      if (document.getElementById('darkMode')) payload.dark_mode = document.getElementById('darkMode').checked;
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image_duration: parseInt(document.getElementById('duration').value),
-          shuffle: document.getElementById('shuffle').checked,
-          loop:    document.getElementById('loop').checked,
-        }),
+        body: JSON.stringify(payload),
       });
       showToast('Paramètres enregistrés');
       loadGallery();
+    }
+
+    function applyDarkMode(enabled) {
+      if (enabled) document.body.classList.add('dark');
+      else document.body.classList.remove('dark');
     }
 
     // ── Gallery ───────────────────────────────────────────
