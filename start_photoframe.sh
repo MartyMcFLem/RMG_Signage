@@ -41,6 +41,14 @@ log "Lancement de: python3 $SCRIPT_PATH"
 
 # Démarrer l'application
 cd "$SCRIPT_DIR"
-python3 "$SCRIPT_PATH" >> "$LOG_FILE" 2>&1
+python3 "$SCRIPT_PATH" >> "$LOG_FILE" 2>&1 &
+PY=$!
+# When the python process is up and running, signal readiness so splash_helper can stop if needed
+sleep 1
+if [ -n "$PY" ]; then
+    touch /run/photoframe-ready
+fi
+
+wait $PY
 
 log "=== Service PhotoFrame arrêté ==="

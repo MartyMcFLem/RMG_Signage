@@ -15,7 +15,11 @@ Environment="XDG_RUNTIME_DIR=/run/user/1000"
 Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p /home/pi/cadre'
+ExecStartPre=/bin/systemctl stop display-manager.service
+ExecStartPre=/bin/bash /home/pi/PhotoFrame/splash_helper.sh start
 ExecStart=/bin/bash /home/pi/PhotoFrame/start_photoframe.sh
+ExecStopPost=/bin/bash /home/pi/PhotoFrame/splash_helper.sh stop
+ExecStopPost=/bin/systemctl start display-manager.service
 Restart=on-failure
 RestartSec=5
 StartLimitIntervalSec=60
