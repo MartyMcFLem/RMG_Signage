@@ -1,8 +1,8 @@
 #!/bin/bash
 # Script de démarrage du cadre photo numérique
 
-# Fichier de log
-LOG_FILE="/home/pi/photoframe.log"
+# Fichier de log (modifiable via PHOTOFRAME_LOG)
+LOG_FILE="${PHOTOFRAME_LOG:-/home/pi/photoframe.log}"
 
 # Fonction de log
 log() {
@@ -12,7 +12,8 @@ log() {
 log "=== Démarrage du service PhotoFrame ==="
 
 # Attendre que X11 ou Wayland soit prêt
-log "Démarrage en mode headless / kiosque (pas d'X par défaut)"
+# Démarrer en mode headless (Pi OS Lite)
+log "Démarrage en mode headless (Pi OS Lite)"
 # Pour Raspberry Pi OS Lite (sans X), forçons l'absence de DISPLAY
 # afin que MPV choisisse un backend framebuffer/DRM (--vo=drm)
 unset DISPLAY || true
@@ -21,17 +22,27 @@ log "USER=$USER"
 log "HOME=$HOME"
 log "PATH=$PATH"
 
-# Vérifier que le dossier des médias existe
-mkdir -p /home/pi/cadre
-log "Dossier média: /home/pi/cadre"
+# Vérifier que le dossier des médias existe (modifiable via PHOTOFRAME_MEDIA_DIR)
+MEDIA_DIR="${PHOTOFRAME_MEDIA_DIR:-/home/pi/cadre}"
+mkdir -p "$MEDIA_DIR"
+log "Dossier média: $MEDIA_DIR"
 
 # Vérifier les permissions du fichier de socket
 rm -f /tmp/mpv-socket 2>/dev/null
 log "Socket MPV préparé"
 
-# Chemin vers le script Python
-SCRIPT_DIR="/home/pi/PhotoFrame"
+# Chemin vers le script Python (modifiable via PHOTOFRAME_DIR)
+SCRIPT_DIR="${PHOTOFRAME_DIR:-/home/pi/PhotoFrame}"
 SCRIPT_PATH="$SCRIPT_DIR/upload.py"
+
+# If a virtualenv exists in the project, activate it so dependencies (flask, etc.) are used
+VENV_DIR="${SCRIPT_DIR}/venv"
+if [ -f "$VENV_DIR/bin/activate" ]; then
+    log "Activation du virtualenv: $VENV_DIR"
+    # shellcheck disable=SC1090
+    . "$VENV_DIR/bin/activate"
+    log "Virtualenv activé: $(which python3)"
+fi
 
 log "Lancement de: python3 $SCRIPT_PATH"
 

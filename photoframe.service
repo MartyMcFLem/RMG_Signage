@@ -2,21 +2,29 @@
 Description=Cadre Photo Numérique - Flask & MPV
 After=network.target
 Wants=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
-User=pi
-Group=pi
+# Use an existing user on the Pi (change to your real username if needed)
+User=inloc
+Group=inloc
 WorkingDirectory=/home/pi/PhotoFrame
+# Environment variables for the service (project dir, media dir, optional log)
+Environment=PHOTOFRAME_DIR=/home/pi/PhotoFrame
+Environment=PHOTOFRAME_MEDIA_DIR=/home/pi/cadre
+Environment=PHOTOFRAME_LOG=/home/pi/photoframe.log
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStartPre=/bin/bash -c 'mkdir -p /home/pi/cadre'
+# Ensure media dir exists before starting
+ExecStartPre=/bin/bash -c 'mkdir -p "$PHOTOFRAME_MEDIA_DIR"'
+# Start splash helper (kept by request)
 ExecStartPre=/bin/bash /home/pi/PhotoFrame/splash_helper.sh start
+# Start the wrapper script which will activate the venv (if present) and launch Python
 ExecStart=/bin/bash /home/pi/PhotoFrame/start_photoframe.sh
 ExecStopPost=/bin/bash /home/pi/PhotoFrame/splash_helper.sh stop
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=60
-StartLimitBurst=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=photoframe
