@@ -399,11 +399,12 @@
 </head>
 <body>
 
-
   <header class="header">
     <div class="header-icon">
-      <img id="logoImg" src="/static/logo.png" alt="Logo" style="width:32px;height:32px;object-fit:contain;display:block;" onerror="this.style.display='none'">
-      <span id="logoFallback" style="display:none;">🖼</span>
+      <img id="siteLogo" src="/static/logo.png" alt="Logo"
+           style="width:32px;height:32px;border-radius:8px;object-fit:cover;display:block"
+           onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'">
+      <div id="logoFallback" style="display:none">🖼</div>
     </div>
     <span class="header-title">Cadre Photo</span>
     <span class="header-count" id="headerCount">0 média</span>
@@ -485,48 +486,23 @@
               <span class="tog-track"></span>
             </label>
           </div>
-          <hr style="margin:16px 0;">
-          <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
-            <div class="setting-label">Logo du cadre</div>
-            <form id="logoForm" enctype="multipart/form-data" style="width:100%;display:flex;gap:8px;align-items:center;" onsubmit="uploadLogo(event)">
-              <input type="file" id="logoInput" name="logo" accept="image/*" style="flex:1;">
-              <button type="submit" class="uz-btn">Changer le logo</button>
-            </form>
-            <div class="setting-hint">Format recommandé : PNG carré, 32x32 ou plus</div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Logo</div>
+              <div class="setting-hint">Modifier le logo affiché en haut à gauche</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <img id="logoPreview" src="/static/logo.png" alt="Preview"
+                   style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:1px solid var(--border)"
+                   onerror="this.style.display='none'">
+              <input type="file" id="logoInput" accept="image/*" style="display:none"
+                     onchange="uploadLogo(this.files)">
+              <button class="ctrl-btn" onclick="document.getElementById('logoInput').click()">Changer</button>
+              <button class="ctrl-btn ctrl-restart" onclick="removeLogo()">Supprimer</button>
+            </div>
           </div>
         </div>
       </div>
-  <script>
-    // Logo fallback if image not found
-    window.addEventListener('DOMContentLoaded', function() {
-      var img = document.getElementById('logoImg');
-      var fallback = document.getElementById('logoFallback');
-      img.onerror = function() {
-        img.style.display = 'none';
-        fallback.style.display = 'block';
-      };
-    });
-
-    // Upload logo
-    function uploadLogo(e) {
-      e.preventDefault();
-      var form = document.getElementById('logoForm');
-      var data = new FormData(form);
-      fetch('/api/upload_logo', {
-        method: 'POST',
-        body: data
-      })
-      .then(r => {
-        if (!r.ok) throw new Error('Erreur lors de l\'upload');
-        return r.json();
-      })
-      .then(res => {
-        showToast('Logo mis à jour !');
-        document.getElementById('logoImg').src = '/static/logo.png?' + Date.now(); // force refresh
-      })
-      .catch(() => showToast('Erreur lors de l\'upload du logo.'));
-    }
-  </script>
 
     </aside>
 
@@ -718,6 +694,42 @@
         loadGallery();
         const n = files.length;
         showToast(n + ' fichier' + (n > 1 ? 's' : '') + ' envoyé' + (n > 1 ? 's' : ''));
+      }
+    }
+
+    // ── Logo upload ───────────────────────────────────
+    async function uploadLogo(files) {
+      if (!files || !files.length) return;
+      const fd = new FormData();
+      fd.append('logo', files[0]);
+      const res = await fetch('/api/logo', { method: 'POST', body: fd });
+      if (res.ok) {
+        // force cache-bust
+        document.getElementById('siteLogo').src = '/static/logo.png?v=' + Date.now();
+        const pv = document.getElementById('logoPreview');
+        if (pv) pv.src = '/static/logo.png?v=' + Date.now();
+        document.getElementById('siteLogo').style.display = 'block';
+        document.getElementById('logoFallback').style.display = 'none';
+        if (pv) pv.style.display = 'block';
+        showToast('Logo mis à jour');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast('Erreur: ' + (data.message || res.statusText));
+      }
+    }
+
+    async function removeLogo() {
+      if (!confirm('Supprimer le logo actuel ?')) return;
+      const res = await fetch('/api/logo', { method: 'DELETE' });
+      if (res.ok) {
+        document.getElementById('siteLogo').style.display = 'none';
+        document.getElementById('logoFallback').style.display = 'flex';
+        const pv = document.getElementById('logoPreview');
+        if (pv) pv.style.display = 'none';
+        showToast('Logo supprimé');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast('Erreur: ' + (data.message || res.statusText));
       }
     }
 
