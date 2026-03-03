@@ -136,10 +136,20 @@ def get_mpv_cmd():
             f.write("border=no\n")
             f.write("osd-bar=no\n")
             f.write("background-color=#000000\n")
-            f.write("vf=scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos\n")
+            # build vf line and optionally append a rotate filter for MPV_ROTATE
+            base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
+            try:
+                rot_val = int(MPV_ROTATE)
+            except Exception:
+                rot_val = None
+            if rot_val == 180:
+                vf_line = base_vf + ",rotate=PI"
+            else:
+                vf_line = base_vf
+            f.write(f"vf={vf_line}\n")
             f.write(f"image-display-duration={config['image_duration']}\n")
-            if MPV_ROTATE:
-                # allow values like 90, 180, 270
+            if MPV_ROTATE and rot_val != 180:
+                # fallback: write video-rotate for other numeric values or user-provided strings
                 f.write(f"video-rotate={MPV_ROTATE}\n")
             f.write(f"input-ipc-server={MPV_SOCKET}\n")
     except:
