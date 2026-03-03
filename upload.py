@@ -449,7 +449,18 @@ def start_mpv():
     last_exception = None
     for vo_args in vo_candidates:
         attempt_cmd = list(cmd)
-        new_cmd = attempt_cmd[:1] + vo_args + extra_list + attempt_cmd[1:]
+        # Ensure --config-dir is passed immediately after the mpv binary
+        config_arg = None
+        rest_args = attempt_cmd[1:]
+        for a in attempt_cmd[1:]:
+            if isinstance(a, str) and a.startswith("--config-dir="):
+                config_arg = a
+                rest_args = [x for x in attempt_cmd[1:] if x != config_arg]
+                break
+        if config_arg:
+            new_cmd = attempt_cmd[:1] + [config_arg] + vo_args + extra_list + rest_args
+        else:
+            new_cmd = attempt_cmd[:1] + vo_args + extra_list + attempt_cmd[1:]
 
         try:
             with open(LOG_FILE, "ab") as logf:
