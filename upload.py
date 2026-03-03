@@ -14,8 +14,7 @@ CONFIG_FILE = os.environ.get("PHOTOFRAME_CONFIG_FILE", os.path.join(MEDIA_DIR, "
 
 MPV_BINARY = shutil.which("mpv") or "mpv"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
-MPV_ROTATE = os.environ.get("MPV_ROTATE", "")
-MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "")
+MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/inloc/.config/mpv")
 LOG_FILE = os.path.join(MEDIA_DIR, "photoframe-mpv.log")
 
 # Configuration par défaut
@@ -137,22 +136,10 @@ def get_mpv_cmd():
             f.write("border=no\n")
             f.write("osd-bar=no\n")
             f.write("background-color=#000000\n")
-            # build vf line and optionally append a rotate filter for MPV_ROTATE
-            base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
-            try:
-                rot_val = int(MPV_ROTATE)
-            except Exception:
-                rot_val = None
-            if rot_val == 180:
-                vf_line = base_vf + ",rotate=PI"
-            else:
-                vf_line = base_vf
-            f.write(f"vf={vf_line}\n")
-            f.write(f"image-display-duration={config['image_duration']}\n")
-            if MPV_ROTATE and rot_val != 180:
-                # fallback: write video-rotate for other numeric values or user-provided strings
-                f.write(f"video-rotate={MPV_ROTATE}\n")
-            f.write(f"input-ipc-server={MPV_SOCKET}\n")
+                base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
+                f.write(f"vf={base_vf}\n")
+                f.write(f"image-display-duration={config['image_duration']}\n")
+                f.write(f"input-ipc-server={MPV_SOCKET}\n")
     except:
         pass
 
