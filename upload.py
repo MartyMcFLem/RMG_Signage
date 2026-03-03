@@ -14,6 +14,7 @@ CONFIG_FILE = os.environ.get("PHOTOFRAME_CONFIG_FILE", os.path.join(MEDIA_DIR, "
 
 MPV_BINARY = shutil.which("mpv") or "mpv"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
+MPV_ROTATE = os.environ.get("MPV_ROTATE", "")
 LOG_FILE = os.path.join(MEDIA_DIR, "photoframe-mpv.log")
 
 # Configuration par défaut
@@ -137,6 +138,9 @@ def get_mpv_cmd():
             f.write("background-color=#000000\n")
             f.write("vf=scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos\n")
             f.write(f"image-display-duration={config['image_duration']}\n")
+            if MPV_ROTATE:
+                # allow values like 90, 180, 270
+                f.write(f"video-rotate={MPV_ROTATE}\n")
             f.write(f"input-ipc-server={MPV_SOCKET}\n")
     except:
         pass
