@@ -13,7 +13,7 @@ case "$1" in
       echo $FBIPID > "$PIDFILE"
       # Start a watcher that will remove the splash when PhotoFrame signals readiness
       (
-        while [ ! -f /run/photoframe-ready ]; do
+        while [ ! -f /run/photoframe/ready ]; do
           sleep 0.5
         done
         # kill the fbi process and cleanup

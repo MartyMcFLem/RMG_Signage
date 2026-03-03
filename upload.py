@@ -1,4 +1,5 @@
 from flask import Flask, request, redirect, jsonify, send_from_directory, render_template
+from werkzeug.utils import secure_filename
 import os
 import threading
 import subprocess
@@ -14,7 +15,7 @@ CONFIG_FILE = os.environ.get("PHOTOFRAME_CONFIG_FILE", os.path.join(MEDIA_DIR, "
 
 MPV_BINARY = shutil.which("mpv") or "mpv"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
-MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/inloc/.config/mpv")
+MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/pi/.config/mpv")
 LOG_FILE = os.path.join(MEDIA_DIR, "photoframe-mpv.log")
 
 # Configuration par défaut
@@ -37,7 +38,18 @@ if os.path.exists(CONFIG_FILE):
         pass
 
 mpv_process = None
+_mpv_lock = threading.Lock()
 MPV_SOCKET = "/tmp/mpv-socket"
+
+# Taille maximale d'upload : 500 Mo
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024
+
+# Extensions media autorisées à l'upload
+ALLOWED_UPLOAD_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
+    '.heic', '.heif',
+    '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'
+}
 
 
 def send_mpv_command(command):
@@ -136,10 +148,10 @@ def get_mpv_cmd():
             f.write("border=no\n")
             f.write("osd-bar=no\n")
             f.write("background-color=#000000\n")
-                base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
-                f.write(f"vf={base_vf}\n")
-                f.write(f"image-display-duration={config['image_duration']}\n")
-                f.write(f"input-ipc-server={MPV_SOCKET}\n")
+            base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
+            f.write(f"vf={base_vf}\n")
+            f.write(f"image-display-duration={config['image_duration']}\n")
+            f.write(f"input-ipc-server={MPV_SOCKET}\n")
     except:
         pass
 
@@ -186,6 +198,7 @@ def get_mpv_cmd():
 
 # === FLASK APP ===
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -193,9 +206,18 @@ def upload():
     if request.method == "POST":
         files = request.files.getlist("files")
         for f in files:
-            if f.filename:
-                path = os.path.join(MEDIA_DIR, f.filename)
-                f.save(path)
+            if not f.filename:
+                continue
+            # Sécuriser le nom de fichier (évite path traversal)
+            safe_name = secure_filename(f.filename)
+            if not safe_name:
+                continue
+            # Vérifier l'extension
+            ext = os.path.splitext(safe_name.lower())[1]
+            if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+                continue
+            path = os.path.join(MEDIA_DIR, safe_name)
+            f.save(path)
         return redirect("/")
 
     return render_template('index.html')
@@ -403,7 +425,9 @@ def play_all_files():
 
 
 def start_flask():
-    app.run(host="0.0.0.0", port=5000)
+    # use_reloader=False évite le double fork qui casserait le thread MPV
+    # threaded=True permet les requêtes concurrentes
+    app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False)
 
 
 def start_mpv():
@@ -497,14 +521,24 @@ def start_mpv():
 
 
 def restart_mpv():
-    """Redémarre MPV"""
+    """Redémarre MPV (protégé par verrou pour éviter les lancements multiples)"""
     global mpv_process
-    if mpv_process:
-        try:
-            mpv_process.terminate()
-            mpv_process.wait(timeout=2)
-        except:
-            mpv_process.kill()
+    if not _mpv_lock.acquire(blocking=False):
+        # Un redémarrage est déjà en cours
+        return
+    try:
+        if mpv_process:
+            try:
+                mpv_process.terminate()
+                mpv_process.wait(timeout=2)
+            except Exception:
+                try:
+                    mpv_process.kill()
+                except Exception:
+                    pass
+        mpv_process = None
+    finally:
+        _mpv_lock.release()
     threading.Thread(target=start_mpv, daemon=True).start()
 
 

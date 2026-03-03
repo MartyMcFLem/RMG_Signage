@@ -8,8 +8,8 @@ StartLimitBurst=5
 [Service]
 Type=simple
 # Use an existing user on the Pi (change to your real username if needed)
-User=inloc
-Group=inloc
+User=pi
+Group=pi
 WorkingDirectory=/home/pi/PhotoFrame
 RuntimeDirectory=photoframe
 RuntimeDirectoryMode=0755
@@ -20,6 +20,9 @@ Environment=PHOTOFRAME_LOG=/home/pi/photoframe.log
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Ensure media dir exists before starting
 ExecStartPre=/bin/bash -c 'mkdir -p "$PHOTOFRAME_MEDIA_DIR"'
+# Ensure runtime dir exists and is owned by the service user (created as root)
+ExecStartPre=/bin/mkdir -p /run/photoframe
+ExecStartPre=/bin/chown pi:pi /run/photoframe
 # Start splash helper (kept by request)
 ExecStartPre=/bin/bash /home/pi/PhotoFrame/splash_helper.sh start
 # Start the wrapper script which will activate the venv (if present) and launch Python

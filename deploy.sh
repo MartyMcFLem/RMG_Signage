@@ -8,7 +8,7 @@ VENV_DIR="$PROJECT_DIR/venv"
 MEDIA_DIR="/home/pi/cadre"
 SERVICE_FILE="$PROJECT_DIR/photoframe.service"
 SERVICE_NAME="photoframe.service"
-USER_NAME="inloc"
+USER_NAME="pi"
 
 if [ "$EUID" -ne 0 ]; then
   echo "This script must be run with sudo: sudo bash deploy.sh"
@@ -39,7 +39,7 @@ deactivate
 
 echo "== Deploying systemd service =="
 if [ -f "$SERVICE_FILE" ]; then
-  cp "$SERVICE_FILE" /etc/systemd/system/"
+  cp "$SERVICE_FILE" /etc/systemd/system/
   systemctl daemon-reload
   systemctl enable "$SERVICE_NAME"
   systemctl restart "$SERVICE_NAME" || true

@@ -22,7 +22,7 @@ sudo cp "$PROJECT_DIR/photoframe.service" /etc/systemd/system/ || {
 }
         # Créer le dossier média et appliquer la bonne propriété
         sudo mkdir -p /home/pi/cadre
-        sudo chown -R inloc:inloc /home/pi/PhotoFrame /home/pi/cadre || true
+        sudo chown -R pi:pi /home/pi/PhotoFrame /home/pi/cadre || true
 
 sudo systemctl daemon-reload
 sudo systemctl enable photoframe.service
