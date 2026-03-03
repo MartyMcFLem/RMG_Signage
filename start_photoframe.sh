@@ -53,7 +53,9 @@ PY=$!
 # When the python process is up and running, signal readiness so splash_helper can stop if needed
 sleep 1
 if [ -n "$PY" ]; then
-    touch /run/photoframe-ready
+    # Use the runtime directory managed by systemd (/run/photoframe)
+    mkdir -p /run/photoframe 2>/dev/null || true
+    touch /run/photoframe/ready
 fi
 
 wait $PY

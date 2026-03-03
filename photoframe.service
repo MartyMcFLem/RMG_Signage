@@ -11,6 +11,8 @@ Type=simple
 User=inloc
 Group=inloc
 WorkingDirectory=/home/pi/PhotoFrame
+RuntimeDirectory=photoframe
+RuntimeDirectoryMode=0755
 # Environment variables for the service (project dir, media dir, optional log)
 Environment=PHOTOFRAME_DIR=/home/pi/PhotoFrame
 Environment=PHOTOFRAME_MEDIA_DIR=/home/pi/cadre
