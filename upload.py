@@ -24,6 +24,7 @@ config = {
     "shuffle": True,
     "loop": True,
     "dark_mode": False,
+    "rotation": 0,           # rotation affichage : 0, 90, 180, 270
     "single_file_mode": False,
     "selected_file": None,
     "file_order": [],        # ordre personnalisé des fichiers
@@ -151,6 +152,7 @@ def get_mpv_cmd():
             base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
             f.write(f"vf={base_vf}\n")
             f.write(f"image-display-duration={config['image_duration']}\n")
+            f.write(f"video-rotate={config.get('rotation', 0)}\n")
             f.write(f"input-ipc-server={MPV_SOCKET}\n")
     except:
         pass
@@ -330,6 +332,8 @@ def manage_config():
             if old_config.get('image_duration') != config.get('image_duration'):
                 restart_mpv()
             elif old_config.get('shuffle') != config.get('shuffle'):
+                restart_mpv()
+            elif old_config.get('rotation') != config.get('rotation'):
                 restart_mpv()
         else:
             restart_mpv()

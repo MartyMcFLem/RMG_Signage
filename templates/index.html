@@ -273,6 +273,20 @@
     }
     .num-input:focus { outline: none; border-color: var(--blue); background: var(--surface); color: var(--text); }
 
+    /* Rotation select */
+    .rot-select {
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    .rot-select:focus { outline: none; border-color: var(--blue); }
+
     /* iOS-style toggle */
     .tog { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
     .tog input { display: none; }
@@ -524,6 +538,18 @@
           </div>
           <div class="setting-row">
             <div>
+              <div class="setting-label">Rotation affichage</div>
+              <div class="setting-hint">Rotation de l&rsquo;écran (sens horaire)</div>
+            </div>
+            <select class="rot-select" id="rotation" onchange="updateConfig()">
+              <option value="0">0° (normal)</option>
+              <option value="90">90°</option>
+              <option value="180">180° (inversé)</option>
+              <option value="270">270°</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div>
               <div class="setting-label">Logo</div>
               <div class="setting-hint">Modifier le logo affiché en haut à gauche</div>
             </div>
@@ -596,6 +622,8 @@
         document.getElementById('darkMode').checked = !!cfg.dark_mode;
         applyDarkMode(!!cfg.dark_mode);
       }
+      const rotEl = document.getElementById('rotation');
+      if (rotEl) rotEl.value = String(cfg.rotation ?? 0);
       refreshNowPlaying(cfg);
       // hide mpv status badge; confirmations use toasts
       const mpv = document.getElementById('mpvStatus');
@@ -621,6 +649,8 @@
         loop:    document.getElementById('loop').checked,
       };
       if (document.getElementById('darkMode')) payload.dark_mode = document.getElementById('darkMode').checked;
+      const rotEl = document.getElementById('rotation');
+      if (rotEl) payload.rotation = parseInt(rotEl.value);
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
