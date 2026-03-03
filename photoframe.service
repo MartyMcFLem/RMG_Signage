@@ -17,6 +17,7 @@ Environment=PHOTOFRAME_MEDIA_DIR=/home/pi/cadre
 Environment=PHOTOFRAME_LOG=/home/pi/photoframe.log
 Environment=MPV_ROTATE=180
 Environment=MPV_EXTRA_ARGS=--video-rotate=180
+Environment=MPV_CONF_DIR=/home/inloc/.config/mpv
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Ensure media dir exists before starting
 ExecStartPre=/bin/bash -c 'mkdir -p "$PHOTOFRAME_MEDIA_DIR"'

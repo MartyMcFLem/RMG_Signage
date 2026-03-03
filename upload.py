@@ -15,6 +15,7 @@ CONFIG_FILE = os.environ.get("PHOTOFRAME_CONFIG_FILE", os.path.join(MEDIA_DIR, "
 MPV_BINARY = shutil.which("mpv") or "mpv"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
 MPV_ROTATE = os.environ.get("MPV_ROTATE", "")
+MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "")
 LOG_FILE = os.path.join(MEDIA_DIR, "photoframe-mpv.log")
 
 # Configuration par défaut
@@ -88,7 +89,7 @@ def is_media_file(filename):
 
 def generate_lua_script():
     """Génère le script Lua mpv pour appliquer les durées personnalisées par fichier"""
-    mpv_conf_dir = os.path.join(MEDIA_DIR, ".config")
+    mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
     os.makedirs(mpv_conf_dir, exist_ok=True)
     script_path = os.path.join(mpv_conf_dir, "per_file_duration.lua")
     # Utiliser des slashes Unix dans le script Lua (tourne sur Raspberry Pi)
@@ -123,7 +124,7 @@ def generate_lua_script():
 
 def get_mpv_cmd():
     """Génère la commande mpv avec la config actuelle"""
-    mpv_conf_dir = os.path.join(MEDIA_DIR, ".config")
+    mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
     os.makedirs(mpv_conf_dir, exist_ok=True)
 
     lua_script = generate_lua_script()
