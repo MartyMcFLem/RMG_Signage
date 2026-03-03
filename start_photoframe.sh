@@ -53,9 +53,21 @@ PY=$!
 # When the python process is up and running, signal readiness so splash_helper can stop if needed
 sleep 1
 if [ -n "$PY" ]; then
-    # Use the runtime directory managed by systemd (/run/photoframe)
-    mkdir -p /run/photoframe 2>/dev/null || true
-    touch /run/photoframe/ready
+    # Prefer systemd RuntimeDirectory if available, otherwise fallback to HOME or /tmp
+    RUNTIME_READY="/run/photoframe/ready"
+    HOME_READY="$HOME/photoframe-ready"
+    FALLBACK_READY="/tmp/photoframe-ready"
+
+    # Try to create and touch the runtime ready file
+    if mkdir -p /run/photoframe 2>/dev/null && touch "$RUNTIME_READY" 2>/dev/null; then
+        log "Wrote readiness file: $RUNTIME_READY"
+    elif [ -n "$HOME" ] && touch "$HOME_READY" 2>/dev/null; then
+        log "Wrote readiness file: $HOME_READY"
+    elif touch "$FALLBACK_READY" 2>/dev/null; then
+        log "Wrote readiness file: $FALLBACK_READY"
+    else
+        log "⚠️  Could not write any readiness file (permission issue)"
+    fi
 fi
 
 wait $PY
