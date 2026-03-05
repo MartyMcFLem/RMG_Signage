@@ -13,7 +13,7 @@ fi
 
 echo "== Mise à jour des paquets et installation des dépendances système =="
 apt update
-apt install -y mpv fbi python3-venv python3-pip
+apt install -y git mpv fbi python3-venv python3-pip
 
 echo "== Création des dossiers et permissions =="
 mkdir -p /home/pi/cadre

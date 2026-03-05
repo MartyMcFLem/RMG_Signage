@@ -11,6 +11,13 @@ if [ ! -d "/home/pi" ]; then
 fi
 
 echo "📦 Déploiement du service systemd (headless)"
+
+# Installer git si absent (requis pour les mises à jour depuis GitHub)
+if ! command -v git &>/dev/null; then
+    echo "📥 Installation de git..."
+    sudo apt-get update -qq
+    sudo apt-get install -y git
+fi
 if [ ! -f "$PROJECT_DIR/photoframe.service" ]; then
     echo "Erreur: $PROJECT_DIR/photoframe.service introuvable" >&2
     exit 1
