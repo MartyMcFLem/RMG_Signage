@@ -474,36 +474,9 @@
     .git-info {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 9px 12px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 12px;
+      justify-content: center;
+      padding: 8px 12px;
       margin-bottom: 12px;
-      min-height: 38px;
-    }
-    .git-info .git-branch {
-      font-weight: 700;
-      color: var(--blue);
-      white-space: nowrap;
-    }
-    .git-info .git-commit {
-      font-family: monospace;
-      font-size: 11px;
-      background: var(--border);
-      padding: 1px 5px;
-      border-radius: 4px;
-      white-space: nowrap;
-      color: var(--text);
-    }
-    .git-info .git-msg {
-      color: var(--text-2);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex: 1;
-      min-width: 0;
     }
     .update-output {
       display: none;
@@ -1051,19 +1024,15 @@
         const el = document.getElementById('gitInfo');
         if (data.success) {
           const upToDate = data.up_to_date;
-          const badge = upToDate === false
-            ? `<span style="margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:#f97316;color:#fff;white-space:nowrap">MISE À JOUR DISPO</span>`
-            : upToDate === true
-              ? `<span style="margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--green);color:#fff;white-space:nowrap">À JOUR</span>`
-              : '';
-          el.innerHTML =
-            `<span>&#x2387;</span>` +
-            `<span class="git-branch">main</span>` +
-            `<span class="git-commit">${data.commit}</span>` +
-            `<span class="git-msg">${data.last_message}</span>` +
-            badge;
+          if (upToDate === false) {
+            el.innerHTML = `<span style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:#f97316;color:#fff;white-space:nowrap">&#x25B2; MISE À JOUR DISPONIBLE</span>`;
+          } else if (upToDate === true) {
+            el.innerHTML = `<span style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:var(--green);color:#fff;white-space:nowrap">&#x2713; À JOUR</span>`;
+          } else {
+            el.innerHTML = `<span style="color:var(--text-2);font-size:12px">Statut inconnu</span>`;
+          }
         } else {
-          el.innerHTML = `<span style="color:var(--red)">${data.message || 'git non disponible'}</span>`;
+          el.innerHTML = `<span style="color:var(--red);font-size:12px">${data.message || 'git non disponible'}</span>`;
         }
       } catch (e) {
         document.getElementById('gitInfo').innerHTML =
