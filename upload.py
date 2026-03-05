@@ -151,13 +151,53 @@ def get_local_ip():
 
 def generate_welcome_screen():
     """Génère un écran de bienvenue affichant l'adresse IP pour le premier démarrage.
+    Fond basé sur static/splash.png si disponible (flouté + assombri).
+    Inclut un QR code pointant vers l'interface web si le module qrcode est installé.
     Retourne le chemin vers l'image PNG générée, ou None en cas d'échec."""
     welcome_path = os.path.join(MEDIA_DIR, ".welcome_screen.png")
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
         ip = get_local_ip()
+        url = f"http://{ip}:5000"
         W, H = 1920, 1080
-        img = Image.new("RGB", (W, H), color=(10, 10, 26))
+        cx, cy = W // 2, H // 2
+
+        # ── Background : splash.png flouté/assombri, ou fond sombre par défaut ────
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        splash_path = os.path.join(script_dir, 'static', 'splash.png')
+        if os.path.exists(splash_path):
+            try:
+                bg = Image.open(splash_path).convert('RGB').resize((W, H), Image.LANCZOS)
+                bg = bg.filter(ImageFilter.GaussianBlur(radius=10))
+                bg = ImageEnhance.Brightness(bg).enhance(0.35)
+                img = bg
+            except Exception:
+                img = Image.new("RGB", (W, H), color=(10, 10, 26))
+        else:
+            img = Image.new("RGB", (W, H), color=(10, 10, 26))
+
+        # ── Overlay semi-transparent (panneau + fond QR) ────────────────────────
+        qr_size = 200
+        qr_x    = cx - qr_size // 2
+        qr_y    = cy + 165
+        qr_pad  = 12
+        panel_w = 860
+        panel_x = cx - panel_w // 2
+        panel_y = cy - 285
+        panel_h = 680
+
+        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        ov = ImageDraw.Draw(overlay)
+        ov.rounded_rectangle(
+            [panel_x, panel_y, panel_x + panel_w, panel_y + panel_h],
+            radius=28, fill=(0, 0, 0, 175)
+        )
+        ov.rounded_rectangle(
+            [qr_x - qr_pad, qr_y - qr_pad,
+             qr_x + qr_size + qr_pad, qr_y + qr_size + qr_pad],
+            radius=14, fill=(15, 15, 35, 230)
+        )
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
         draw = ImageDraw.Draw(img)
 
         def load_font(name, size):
@@ -173,21 +213,45 @@ def generate_welcome_screen():
 
         font_title = load_font("DejaVuSans-Bold.ttf", 80)
         font_sub   = load_font("DejaVuSans.ttf", 44)
-        font_url   = load_font("DejaVuSans-Bold.ttf", 68)
-        font_hint  = load_font("DejaVuSans.ttf", 32)
+        font_url   = load_font("DejaVuSans-Bold.ttf", 60)
+        font_hint  = load_font("DejaVuSans.ttf", 30)
 
-        cx = W // 2
+        # ── Texte ───────────────────────────────────────────────────────────────
         try:
-            draw.text((cx, H // 2 - 200), "RMG Signage",                       fill=(255, 255, 255), font=font_title, anchor="mm")
-            draw.line([(cx - 320, H // 2 - 130), (cx + 320, H // 2 - 130)],   fill=(50, 50, 90), width=2)
-            draw.text((cx, H // 2 - 70),  "Aucun média à afficher",             fill=(140, 140, 165), font=font_sub,   anchor="mm")
-            draw.text((cx, H // 2 + 30),  f"http://{ip}:5000",                  fill=(74, 158, 255),  font=font_url,   anchor="mm")
-            draw.text((cx, H // 2 + 130), "Connectez-vous pour importer des médias", fill=(70, 70, 95), font=font_hint, anchor="mm")
+            draw.text((cx, cy - 240), "RMG Signage",
+                      fill=(255, 255, 255), font=font_title, anchor="mm")
+            draw.line([(cx - 340, cy - 168), (cx + 340, cy - 168)],
+                      fill=(70, 70, 110), width=2)
+            draw.text((cx, cy - 105), "Aucun média à afficher",
+                      fill=(140, 140, 165), font=font_sub, anchor="mm")
+            draw.text((cx, cy + 5), url,
+                      fill=(74, 158, 255), font=font_url, anchor="mm")
+            draw.text((cx, cy + 95), "Scannez le QR code ou connectez-vous :",
+                      fill=(100, 100, 135), font=font_hint, anchor="mm")
         except TypeError:
-            # Fallback si anchor n'est pas supporté (très ancienne version Pillow)
-            draw.text((50, 80),  "RMG Signage",         fill=(255, 255, 255), font=font_title)
-            draw.text((50, 220), "Aucun media",          fill=(140, 140, 165), font=font_sub)
-            draw.text((50, 380), f"http://{ip}:5000",    fill=(74, 158, 255),  font=font_url)
+            draw.text((50, 80),  "RMG Signage", fill=(255, 255, 255), font=font_title)
+            draw.text((50, 220), "Aucun media",  fill=(140, 140, 165), font=font_sub)
+            draw.text((50, 380), url,            fill=(74, 158, 255),  font=font_url)
+
+        # ── QR code ─────────────────────────────────────────────────────────────
+        try:
+            import qrcode as _qrcode
+            qr = _qrcode.QRCode(
+                box_size=8, border=2,
+                error_correction=_qrcode.constants.ERROR_CORRECT_M
+            )
+            qr.add_data(url)
+            qr.make(fit=True)
+            qr_img = qr.make_image(
+                fill_color=(74, 158, 255),
+                back_color=(15, 15, 35)
+            ).convert('RGB')
+            qr_img = qr_img.resize((qr_size, qr_size), Image.NEAREST)
+            img.paste(qr_img, (qr_x, qr_y))
+        except ImportError:
+            # qrcode non installé — on répète l'URL à la place
+            draw.text((cx, qr_y + qr_size // 2), url,
+                      fill=(74, 158, 255), font=font_url, anchor="mm")
 
         os.makedirs(MEDIA_DIR, exist_ok=True)
         img.save(welcome_path)
