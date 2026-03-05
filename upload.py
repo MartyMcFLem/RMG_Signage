@@ -149,6 +149,7 @@ def get_mpv_cmd():
             f.write("border=no\n")
             f.write("osd-bar=no\n")
             f.write("background-color=#000000\n")
+            f.write("alpha=blend\n")  # Fond transparent PNG → fondu sur background-color (évite le damier)
             base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
             f.write(f"vf={base_vf}\n")
             f.write(f"image-display-duration={config['image_duration']}\n")
@@ -557,7 +558,11 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"⚠️ Impossible de créer config.json : {e}")
 
-    flask_thread = threading.Thread(target=start_flask, daemon=True)
-    flask_thread.start()
+    # MPV tourne en thread daemon : quand restart_mpv() le tue, proc.wait() retourne
+    # et le thread s'arrête proprement sans emporter toute l'application.
+    mpv_thread = threading.Thread(target=start_mpv, daemon=True)
+    mpv_thread.start()
 
-    start_mpv()
+    # Flask bloque le thread principal (non-daemon) → le processus reste en vie
+    # même après un redémarrage mpv.
+    start_flask()

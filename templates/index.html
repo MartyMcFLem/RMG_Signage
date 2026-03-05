@@ -399,12 +399,15 @@
       font-size: 10px; color: rgba(255,255,255,.88);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
     }
-    .vid-badge {
-      background: var(--purple); color: #fff;
+    .type-badge {
       font-size: 9px; font-weight: 700;
       padding: 2px 5px; border-radius: 3px;
       letter-spacing: .4px; white-space: nowrap;
+      flex-shrink: 0;
     }
+    .badge-video { background: var(--purple); color: #fff; }
+    .badge-gif   { background: #f97316;       color: #fff; }
+    .badge-img   { background: #0ea5e9;       color: #fff; }
     .dur-pill {
       display: flex; align-items: center; gap: 6px;
       background: var(--pill-bg);
@@ -482,7 +485,7 @@
           </div>
           <div class="now-playing" id="nowPlaying">
             <span class="np-dot"></span>
-            <span>Affichage unique : <strong id="nowPlayingName"></strong></span>
+            <span>En cours d'affichage : <strong id="nowPlayingName"></strong></span>
           </div>
           <div class="ctrl-grid">
             <button class="ctrl-btn ctrl-restart" onclick="control('restart')">↻ Redémarrer</button>
@@ -559,7 +562,7 @@
                    onerror="this.style.display='none'">
               <input type="file" id="logoInput" accept="image/*" style="display:none"
                      onchange="uploadLogo(this.files)">
-              <button class="ctrl-btn" onclick="document.getElementById('logoInput').click()">Changer</button>
+              <button class="ctrl-btn" onclick="var i=document.getElementById('logoInput');i.value='';i.click()">Changer</button>
               <button class="ctrl-btn ctrl-restart" onclick="removeLogo()">Supprimer</button>
             </div>
           </div>
@@ -600,7 +603,9 @@
     let toastTimer = null;
 
     const VIDEO_EXT = /\.(mp4|avi|mkv|mov|webm|m4v)$/i;
+    const GIF_EXT   = /\.gif$/i;
     const isVideo = f => VIDEO_EXT.test(f);
+    const isGif   = f => GIF_EXT.test(f);
 
     // ── Toast ─────────────────────────────────────────────
     function showToast(msg) {
@@ -648,7 +653,8 @@
         shuffle: document.getElementById('shuffle').checked,
         loop:    document.getElementById('loop').checked,
       };
-      if (document.getElementById('darkMode')) payload.dark_mode = document.getElementById('darkMode').checked;
+      const darkModeEl = document.getElementById('darkMode');
+      if (darkModeEl) payload.dark_mode = darkModeEl.checked;
       const rotEl = document.getElementById('rotation');
       if (rotEl) payload.rotation = parseInt(rotEl.value);
       await fetch('/api/config', {
@@ -656,7 +662,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (darkModeEl) applyDarkMode(darkModeEl.checked);
       showToast('Paramètres enregistrés');
+      loadConfig();
       loadGallery();
     }
 
@@ -697,6 +705,7 @@
       document.getElementById('gallery').innerHTML = sorted.map((file, i) => {
         const sel       = cfg.single_file_mode && cfg.selected_file === file;
         const video     = isVideo(file);
+        const gif       = isGif(file);
         const customDur = cfg.file_durations?.[file] ?? '';
         const defDur    = cfg.image_duration;
         const safeFile  = file.replace(/"/g, '&quot;');
@@ -719,9 +728,9 @@
               </div>
               <div class="item-foot">
                 <span class="item-name">${file}</span>
-                ${video
-                  ? '<span class="vid-badge">VIDEO</span>'
-                  : `<div class="dur-pill" onclick="event.stopPropagation()">
+                <span class="type-badge ${video ? 'badge-video' : gif ? 'badge-gif' : 'badge-img'}">${video ? 'VIDEO' : gif ? 'GIF' : 'IMG'}</span>
+                ${!video
+                  ? `<div class="dur-pill" onclick="event.stopPropagation()">
                        <input type="number"
                               value="${customDur}"
                               placeholder="${defDur}"
@@ -731,6 +740,7 @@
                               onclick="event.stopPropagation()">
                        <span>s</span>
                      </div>`
+                  : ''
                 }
               </div>
             </div>
@@ -783,19 +793,25 @@
       if (!files || !files.length) return;
       const fd = new FormData();
       fd.append('logo', files[0]);
-      const res = await fetch('/api/logo', { method: 'POST', body: fd });
-      if (res.ok) {
-        // force cache-bust
-        document.getElementById('siteLogo').src = '/static/logo.png?v=' + Date.now();
-        const pv = document.getElementById('logoPreview');
-        if (pv) pv.src = '/static/logo.png?v=' + Date.now();
-        document.getElementById('siteLogo').style.display = 'block';
-        document.getElementById('logoFallback').style.display = 'none';
-        if (pv) pv.style.display = 'block';
-        showToast('Logo mis à jour');
-      } else {
-        const data = await res.json().catch(() => ({}));
-        showToast('Erreur: ' + (data.message || res.statusText));
+      // Reset input so the same file can be re-selected next time
+      document.getElementById('logoInput').value = '';
+      try {
+        const res = await fetch('/api/logo', { method: 'POST', body: fd });
+        if (res.ok) {
+          // force cache-bust
+          const v = '?v=' + Date.now();
+          document.getElementById('siteLogo').src = '/static/logo.png' + v;
+          const pv = document.getElementById('logoPreview');
+          if (pv) { pv.src = '/static/logo.png' + v; pv.style.display = 'block'; }
+          document.getElementById('siteLogo').style.display = 'block';
+          document.getElementById('logoFallback').style.display = 'none';
+          showToast('Logo mis à jour');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          showToast('Erreur: ' + (data.message || res.statusText));
+        }
+      } catch (err) {
+        showToast('Erreur réseau : impossible de contacter le serveur');
       }
     }
 
@@ -894,6 +910,8 @@
       const res  = await fetch('/api/control/' + action, { method: 'POST' });
       const data = await res.json();
       showToast(data.message);
+      loadConfig();
+      loadGallery();
     }
 
     // ── Init ──────────────────────────────────────────────
