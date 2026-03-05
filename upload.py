@@ -10,14 +10,14 @@ import shlex
 
 # === CONFIG ===
 HOME_DIR = os.path.expanduser("~")
-MEDIA_DIR = os.environ.get("PHOTOFRAME_MEDIA_DIR", "/home/pi/cadre")
-CONFIG_FILE = os.environ.get("PHOTOFRAME_CONFIG_FILE", os.path.join(MEDIA_DIR, "config.json"))
+MEDIA_DIR = os.environ.get("RMG_SIGNAGE_MEDIA_DIR", "/home/rmg/signage/medias")
+CONFIG_FILE = os.environ.get("RMG_SIGNAGE_CONFIG_FILE", os.path.join(MEDIA_DIR, "config.json"))
 
 MPV_BINARY = shutil.which("mpv") or "mpv"
 GIT_BINARY = shutil.which("git") or "/usr/bin/git"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
-MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/pi/.config/mpv")
-LOG_FILE = os.path.join(MEDIA_DIR, "photoframe-mpv.log")
+MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/rmg/.config/mpv")
+LOG_FILE = os.path.join(MEDIA_DIR, "rmg_signage-mpv.log")
 
 # Configuration par défaut
 config = {
@@ -433,7 +433,7 @@ def play_all_files():
 @app.route("/api/update/status", methods=["GET"])
 def update_git_status():
     """Retourne les informations git actuelles (branche locale + dernier commit de origin/main)"""
-    script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
+    script_dir = os.environ.get("RMG_SIGNAGE_DIR", "/home/rmg/PhotoFrame")
     try:
         # État local
         commit = subprocess.check_output(
@@ -477,7 +477,7 @@ def update_git_status():
 @app.route("/api/update", methods=["POST"])
 def update_from_github():
     """Bascule sur main, aligne sur origin/main et redémarre si nécessaire"""
-    script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
+    script_dir = os.environ.get("RMG_SIGNAGE_DIR", "/home/rmg/PhotoFrame")
     try:
         before = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
@@ -520,7 +520,7 @@ def update_from_github():
         if updated:
             def delayed_restart():
                 time.sleep(1.5)
-                subprocess.Popen(["sudo", "systemctl", "restart", "photoframe"])
+                subprocess.Popen(["sudo", "systemctl", "restart", "rmg_signage"])
             threading.Thread(target=delayed_restart, daemon=True).start()
 
         return jsonify({

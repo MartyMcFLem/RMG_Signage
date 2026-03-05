@@ -3,7 +3,7 @@ set -e
 # Script d'installation pour Raspberry Pi OS Lite
 # Usage: sudo bash setup_lite.sh
 
-PROJECT_DIR="/home/pi/PhotoFrame"
+PROJECT_DIR="/home/rmg/PhotoFrame"
 VENV_DIR="$PROJECT_DIR/venv"
 
 if [ "$EUID" -ne 0 ]; then
@@ -16,9 +16,9 @@ apt update
 apt install -y git mpv fbi python3-venv python3-pip
 
 echo "== Création des dossiers et permissions =="
-mkdir -p /home/pi/cadre
-chown -R pi:pi "$PROJECT_DIR" /home/pi/cadre || true
-usermod -aG video,input pi || true
+mkdir -p /home/rmg/signage/medias
+chown -R rmg:rmg "$PROJECT_DIR" /home/rmg/signage || true
+usermod -aG video,input rmg || true
 
 echo "== Rendre les scripts exécutables =="
 chmod +x "$PROJECT_DIR"/*.sh || true
@@ -39,20 +39,20 @@ fi
 deactivate
 
 echo "== Déploiement du service systemd =="
-if [ -f "$PROJECT_DIR/photoframe.service" ]; then
-  if [ -f /etc/systemd/system/photoframe.service ]; then
-    cp /etc/systemd/system/photoframe.service /etc/systemd/system/photoframe.service.bak
+if [ -f "$PROJECT_DIR/rmg_signage.service" ]; then
+  if [ -f /etc/systemd/system/rmg_signage.service ]; then
+    cp /etc/systemd/system/rmg_signage.service /etc/systemd/system/rmg_signage.service.bak
   fi
-  cp "$PROJECT_DIR/photoframe.service" /etc/systemd/system/
+  cp "$PROJECT_DIR/rmg_signage.service" /etc/systemd/system/
   systemctl daemon-reload
-  systemctl enable photoframe.service
-  systemctl restart photoframe.service || true
+  systemctl enable rmg_signage.service
+  systemctl restart rmg_signage.service || true
 else
-  echo "Aucun fichier photoframe.service trouvé dans $PROJECT_DIR — merci de le copier manuellement." >&2
+  echo "Aucun fichier rmg_signage.service trouvé dans $PROJECT_DIR — merci de le copier manuellement." >&2
 fi
 
 echo "== Fait: le service devrait être démarré. Suivez les logs avec:" 
-echo "sudo journalctl -u photoframe -f"
-echo "Ou consultez /home/pi/photoframe.log et /home/pi/cadre/photoframe-mpv.log"
+echo "sudo journalctl -u rmg_signage -f"
+echo "Ou consultez /home/rmg/rmg_signage.log et /home/rmg/signage/medias/rmg_signage-mpv.log"
 
 exit 0

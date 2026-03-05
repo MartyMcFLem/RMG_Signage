@@ -3,12 +3,12 @@ set -e
 # Deploy script for Raspberry Pi OS Lite
 # Usage: sudo bash deploy.sh
 
-PROJECT_DIR="/home/pi/PhotoFrame"
+PROJECT_DIR="/home/rmg/PhotoFrame"
 VENV_DIR="$PROJECT_DIR/venv"
-MEDIA_DIR="/home/pi/cadre"
-SERVICE_FILE="$PROJECT_DIR/photoframe.service"
-SERVICE_NAME="photoframe.service"
-USER_NAME="pi"
+MEDIA_DIR="/home/rmg/signage/medias"
+SERVICE_FILE="$PROJECT_DIR/rmg_signage.service"
+SERVICE_NAME="rmg_signage.service"
+USER_NAME="rmg"
 
 if [ "$EUID" -ne 0 ]; then
   echo "This script must be run with sudo: sudo bash deploy.sh"
@@ -50,7 +50,7 @@ fi
 
 echo ""
 echo "✅ Deploy complete. Follow runtime logs with:"
-echo "  sudo journalctl -u photoframe -f"
-echo "Or check the application log (default): /home/pi/photoframe.log"
+echo "  sudo journalctl -u rmg_signage -f"
+echo "Or check the application log (default): /home/rmg/rmg_signage.log"
 
 exit 0

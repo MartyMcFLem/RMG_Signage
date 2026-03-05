@@ -1,15 +1,15 @@
 #!/bin/bash
-# Script de démarrage du cadre photo numérique
+# Script de démarrage du service rmg_signage
 
-# Fichier de log (modifiable via PHOTOFRAME_LOG)
-LOG_FILE="${PHOTOFRAME_LOG:-/home/pi/photoframe.log}"
+# Fichier de log (modifiable via RMG_SIGNAGE_LOG)
+LOG_FILE="${RMG_SIGNAGE_LOG:-/home/rmg/rmg_signage.log}"
 
 # Fonction de log
 log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [PhotoFrame] $1" >> "$LOG_FILE"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [rmg_signage] $1" >> "$LOG_FILE"
 }
 
-log "=== Démarrage du service PhotoFrame ==="
+log "=== Démarrage du service rmg_signage ==="
 
 # Attendre que X11 ou Wayland soit prêt
 # Démarrer en mode headless (Pi OS Lite)
@@ -22,8 +22,8 @@ log "USER=$USER"
 log "HOME=$HOME"
 log "PATH=$PATH"
 
-# Vérifier que le dossier des médias existe (modifiable via PHOTOFRAME_MEDIA_DIR)
-MEDIA_DIR="${PHOTOFRAME_MEDIA_DIR:-/home/pi/cadre}"
+# Vérifier que le dossier des médias existe (modifiable via RMG_SIGNAGE_MEDIA_DIR)
+MEDIA_DIR="${RMG_SIGNAGE_MEDIA_DIR:-/home/rmg/signage/medias}"
 mkdir -p "$MEDIA_DIR"
 log "Dossier média: $MEDIA_DIR"
 
@@ -31,8 +31,8 @@ log "Dossier média: $MEDIA_DIR"
 rm -f /tmp/mpv-socket 2>/dev/null
 log "Socket MPV préparé"
 
-# Chemin vers le script Python (modifiable via PHOTOFRAME_DIR)
-SCRIPT_DIR="${PHOTOFRAME_DIR:-/home/pi/PhotoFrame}"
+# Chemin vers le script Python (modifiable via RMG_SIGNAGE_DIR)
+SCRIPT_DIR="${RMG_SIGNAGE_DIR:-/home/rmg/PhotoFrame}"
 SCRIPT_PATH="$SCRIPT_DIR/upload.py"
 
 # If a virtualenv exists in the project, activate it so dependencies (flask, etc.) are used
@@ -54,12 +54,12 @@ PY=$!
 sleep 1
 if [ -n "$PY" ]; then
     # Prefer systemd RuntimeDirectory if available, otherwise fallback to HOME or /tmp
-    RUNTIME_READY="/run/photoframe/ready"
-    HOME_READY="$HOME/photoframe-ready"
-    FALLBACK_READY="/tmp/photoframe-ready"
+    RUNTIME_READY="/run/rmg_signage/ready"
+    HOME_READY="$HOME/rmg_signage-ready"
+    FALLBACK_READY="/tmp/rmg_signage-ready"
 
     # Try to create and touch the runtime ready file
-    if mkdir -p /run/photoframe 2>/dev/null && touch "$RUNTIME_READY" 2>/dev/null; then
+    if mkdir -p /run/rmg_signage 2>/dev/null && touch "$RUNTIME_READY" 2>/dev/null; then
         log "Wrote readiness file: $RUNTIME_READY"
     elif [ -n "$HOME" ] && touch "$HOME_READY" 2>/dev/null; then
         log "Wrote readiness file: $HOME_READY"
@@ -72,4 +72,4 @@ fi
 
 wait $PY
 
-log "=== Service PhotoFrame arrêté ==="
+log "=== Service rmg_signage arrêté ==="

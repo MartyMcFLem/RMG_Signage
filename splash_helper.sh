@@ -1,7 +1,7 @@
 #!/bin/bash
 # Helper to display/clear a splash image on tty1 using fbi (framebuffer imageviewer)
-SPLASH_IMG="/home/pi/PhotoFrame/static/splash.png"
-PIDFILE="/run/photoframe-splash.pid"
+SPLASH_IMG="/home/rmg/PhotoFrame/static/splash.png"
+PIDFILE="/run/rmg_signage-splash.pid"
 
 case "$1" in
   start)
@@ -11,9 +11,9 @@ case "$1" in
       nohup /usr/bin/fbi -T 1 -noverbose -a "$SPLASH_IMG" >/dev/null 2>&1 &
       FBIPID=$!
       echo $FBIPID > "$PIDFILE"
-      # Start a watcher that will remove the splash when PhotoFrame signals readiness
+      # Start a watcher that will remove the splash when rmg_signage signals readiness
       (
-        while [ ! -f /run/photoframe/ready ]; do
+        while [ ! -f /run/rmg_signage/ready ]; do
           sleep 0.5
         done
         # kill the fbi process and cleanup

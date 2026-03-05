@@ -1,4 +1,4 @@
-# 🖼️ PhotoFrame — Installation (Raspberry Pi OS Lite)
+# 🖼️ RMG Signage — Installation (Raspberry Pi OS Lite)
 
 Ce document décrit l'installation et le dépannage pour un usage headless
 sur Raspberry Pi OS Lite (sans serveur graphique). L'installation fournie
@@ -19,7 +19,7 @@ sudo ./install.sh
 Suivre les logs :
 
 ```bash
-sudo journalctl -u photoframe -f
+sudo journalctl -u rmg_signage -f
 ```
 
 ## Dépendances système recommandées
@@ -27,31 +27,31 @@ sudo journalctl -u photoframe -f
 ```bash
 sudo apt update
 sudo apt install -y mpv fbi python3-venv python3-pip
-sudo usermod -aG video,input pi
+sudo usermod -aG video,input rmg
 ```
 
 ## Virtualenv (optionnel)
 
 ```bash
-python3 -m venv /home/pi/PhotoFrame/venv
-source /home/pi/PhotoFrame/venv/bin/activate
-pip install -r /home/pi/PhotoFrame/requirements.txt
+python3 -m venv /home/rmg/PhotoFrame/venv
+source /home/rmg/PhotoFrame/venv/bin/activate
+pip install -r /home/rmg/PhotoFrame/requirements.txt
 deactivate
 ```
 
 ## Emplacements importants
 
-- Service systemd : `/etc/systemd/system/photoframe.service` (vérifiez `User`, `WorkingDirectory`, `ExecStart`)
-- Dossier médias : `/home/pi/cadre` (modifiable via `PHOTOFRAME_MEDIA_DIR`)
-- Script de démarrage : `start_photoframe.sh`
+- Service systemd : `/etc/systemd/system/rmg_signage.service` (vérifiez `User`, `WorkingDirectory`, `ExecStart`)
+- Dossier médias : `/home/rmg/signage/medias` (modifiable via `RMG_SIGNAGE_MEDIA_DIR`)
+- Script de démarrage : `start_rmg_signage.sh`
 
 ## Dépannage
 
-- Voir les logs du service : `sudo journalctl -u photoframe -f`
+- Voir les logs du service : `sudo journalctl -u rmg_signage -f`
 - Tester manuellement :
 
 ```bash
-cd /home/pi/PhotoFrame
+cd /home/rmg/PhotoFrame
 python3 upload.py
 ```
 

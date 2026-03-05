@@ -1,5 +1,5 @@
 [Unit]
-Description=Cadre Photo Numérique - Flask & MPV
+Description=RMG Signage - Flask & MPV
 After=network.target
 Wants=network.target
 StartLimitIntervalSec=60
@@ -8,31 +8,31 @@ StartLimitBurst=5
 [Service]
 Type=simple
 # Use an existing user on the Pi (change to your real username if needed)
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/PhotoFrame
-RuntimeDirectory=photoframe
+User=rmg
+Group=rmg
+WorkingDirectory=/home/rmg/PhotoFrame
+RuntimeDirectory=rmg_signage
 RuntimeDirectoryMode=0755
 # Environment variables for the service (project dir, media dir, optional log)
-Environment=PHOTOFRAME_DIR=/home/pi/PhotoFrame
-Environment=PHOTOFRAME_MEDIA_DIR=/home/pi/cadre
-Environment=PHOTOFRAME_LOG=/home/pi/photoframe.log
+Environment=RMG_SIGNAGE_DIR=/home/rmg/PhotoFrame
+Environment=RMG_SIGNAGE_MEDIA_DIR=/home/rmg/signage/medias
+Environment=RMG_SIGNAGE_LOG=/home/rmg/rmg_signage.log
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # Ensure media dir exists before starting
-ExecStartPre=/bin/bash -c 'mkdir -p "$PHOTOFRAME_MEDIA_DIR"'
+ExecStartPre=/bin/bash -c 'mkdir -p "$RMG_SIGNAGE_MEDIA_DIR"'
 # Ensure runtime dir exists and is owned by the service user (created as root)
-ExecStartPre=/bin/mkdir -p /run/photoframe
-ExecStartPre=/bin/chown pi:pi /run/photoframe
+ExecStartPre=/bin/mkdir -p /run/rmg_signage
+ExecStartPre=/bin/chown rmg:rmg /run/rmg_signage
 # Start splash helper (kept by request)
-ExecStartPre=/bin/bash /home/pi/PhotoFrame/splash_helper.sh start
+ExecStartPre=/bin/bash /home/rmg/PhotoFrame/splash_helper.sh start
 # Start the wrapper script which will activate the venv (if present) and launch Python
-ExecStart=/bin/bash /home/pi/PhotoFrame/start_photoframe.sh
-ExecStopPost=/bin/bash /home/pi/PhotoFrame/splash_helper.sh stop
+ExecStart=/bin/bash /home/rmg/PhotoFrame/start_rmg_signage.sh
+ExecStopPost=/bin/bash /home/rmg/PhotoFrame/splash_helper.sh stop
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=photoframe
+SyslogIdentifier=rmg_signage
 TimeoutStartSec=180
 
 [Install]
