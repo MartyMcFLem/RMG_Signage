@@ -716,7 +716,10 @@ def start_flask():
 def start_mpv():
     """Lance MPV avec la config actuelle"""
     global mpv_process
-    time.sleep(1)
+    # Délai de 4s : laisse le splash (mpv DRM) être tué par le watcher de
+    # splash_helper.sh et libérer le device DRM avant que ce mpv ne démarre.
+    # Timeline typique : Flask prêt ~1s → splash tué ~1.5s → mpv principal à 4s.
+    time.sleep(4)
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
