@@ -15,7 +15,7 @@ Ce document décrit l'installation sur Raspberry Pi OS Lite (headless, sans inte
 
 ### Option A — Bootstrap (tout-en-un, recommandé)
 
-Une seule commande : télécharge et exécute l'installateur directement.
+Une seule commande : clone le projet dans `/opt/rmg_signage` et installe tout automatiquement.
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash
