@@ -135,6 +135,68 @@ def generate_lua_script():
     return script_path
 
 
+def get_local_ip():
+    """Retourne l'adresse IP locale de la machine"""
+    try:
+        import socket as _socket
+        s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        s.settimeout(0)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "?.?.?.?"
+
+
+def generate_welcome_screen():
+    """Génère un écran de bienvenue affichant l'adresse IP pour le premier démarrage.
+    Retourne le chemin vers l'image PNG générée, ou None en cas d'échec."""
+    welcome_path = os.path.join(MEDIA_DIR, ".welcome_screen.png")
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        ip = get_local_ip()
+        W, H = 1920, 1080
+        img = Image.new("RGB", (W, H), color=(10, 10, 26))
+        draw = ImageDraw.Draw(img)
+
+        def load_font(name, size):
+            for path in [
+                f"/usr/share/fonts/truetype/dejavu/{name}",
+                f"/usr/share/fonts/truetype/liberation/Liberation{name}",
+            ]:
+                try:
+                    return ImageFont.truetype(path, size)
+                except Exception:
+                    pass
+            return ImageFont.load_default()
+
+        font_title = load_font("DejaVuSans-Bold.ttf", 80)
+        font_sub   = load_font("DejaVuSans.ttf", 44)
+        font_url   = load_font("DejaVuSans-Bold.ttf", 68)
+        font_hint  = load_font("DejaVuSans.ttf", 32)
+
+        cx = W // 2
+        try:
+            draw.text((cx, H // 2 - 200), "RMG Signage",                       fill=(255, 255, 255), font=font_title, anchor="mm")
+            draw.line([(cx - 320, H // 2 - 130), (cx + 320, H // 2 - 130)],   fill=(50, 50, 90), width=2)
+            draw.text((cx, H // 2 - 70),  "Aucun média à afficher",             fill=(140, 140, 165), font=font_sub,   anchor="mm")
+            draw.text((cx, H // 2 + 30),  f"http://{ip}:5000",                  fill=(74, 158, 255),  font=font_url,   anchor="mm")
+            draw.text((cx, H // 2 + 130), "Connectez-vous pour importer des médias", fill=(70, 70, 95), font=font_hint, anchor="mm")
+        except TypeError:
+            # Fallback si anchor n'est pas supporté (très ancienne version Pillow)
+            draw.text((50, 80),  "RMG Signage",         fill=(255, 255, 255), font=font_title)
+            draw.text((50, 220), "Aucun media",          fill=(140, 140, 165), font=font_sub)
+            draw.text((50, 380), f"http://{ip}:5000",    fill=(74, 158, 255),  font=font_url)
+
+        os.makedirs(MEDIA_DIR, exist_ok=True)
+        img.save(welcome_path)
+        return welcome_path
+    except Exception as e:
+        print(f"⚠️  Écran de bienvenue non généré : {e}")
+        return None
+
+
 def get_mpv_cmd():
     """Génère la commande mpv avec la config actuelle"""
     mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
@@ -151,8 +213,7 @@ def get_mpv_cmd():
             f.write("osd-bar=no\n")
             f.write("background-color=#000000\n")
             f.write("alpha=blend\n")  # Fond transparent PNG → fondu sur background-color (évite le damier)
-            base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
-            f.write(f"vf={base_vf}\n")
+            f.write("panscan=1.0\n")  # Zoom pour remplir l'écran (coupe les bords si rapport différent)
             f.write(f"image-display-duration={config['image_duration']}\n")
             f.write(f"video-rotate={config.get('rotation', 0)}\n")
             f.write(f"input-ipc-server={MPV_SOCKET}\n")
@@ -177,6 +238,11 @@ def get_mpv_cmd():
         all_files = []
 
     if not all_files:
+        # Pas de médias : afficher l'écran de bienvenue avec l'adresse IP
+        welcome = generate_welcome_screen()
+        if welcome and os.path.exists(welcome):
+            cmd_welcome = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", "--loop-file=inf", welcome]
+            return cmd_welcome
         return None
 
     # Appliquer l'ordre personnalisé si shuffle désactivé
@@ -209,6 +275,7 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE
 def upload():
     if request.method == "POST":
         files = request.files.getlist("files")
+        files_saved = 0
         for f in files:
             if not f.filename:
                 continue
@@ -222,6 +289,10 @@ def upload():
                 continue
             path = os.path.join(MEDIA_DIR, safe_name)
             f.save(path)
+            files_saved += 1
+        if files_saved:
+            # Déclencher la mise à jour MPV (remplace l'écran de bienvenue si actif)
+            update_mpv_playlist()
         return redirect("/")
 
     return render_template('index.html')
