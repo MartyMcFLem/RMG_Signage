@@ -135,18 +135,57 @@ def generate_lua_script():
     return script_path
 
 
-def get_local_ip():
-    """Retourne l'adresse IP locale de la machine"""
-    try:
-        import socket as _socket
+def get_local_ip(retries=8, delay=2.0):
+    """Retourne l'adresse IP locale. Réessaie plusieurs fois pour laisser
+    le réseau s'initialiser au démarrage du Pi."""
+    import socket as _socket
+
+    def _try_udp():
+        """Méthode UDP (pas de paquet réellement envoyé)"""
         s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-        s.settimeout(0)
+        s.settimeout(1)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
         return ip
-    except Exception:
-        return "?.?.?.?"
+
+    def _try_hostname():
+        """Via le hostname local"""
+        return _socket.gethostbyname(_socket.gethostname())
+
+    def _try_ifconfig():
+        """Lecture directe de l'interface réseau via ip/ifconfig"""
+        for cmd in (
+            ["ip", "-4", "addr", "show", "scope", "global"],
+            ["hostname", "-I"],
+        ):
+            try:
+                out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode()
+                if cmd[0] == "hostname":
+                    ips = [x for x in out.split() if x and not x.startswith("127.")]
+                    if ips:
+                        return ips[0]
+                else:
+                    import re
+                    ips = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", out)
+                    ips = [ip for ip in ips if not ip.startswith("127.")]
+                    if ips:
+                        return ips[0]
+            except Exception:
+                pass
+        return None
+
+    for attempt in range(retries):
+        for method in (_try_udp, _try_hostname, _try_ifconfig):
+            try:
+                ip = method()
+                if ip and not ip.startswith("127.") and ip != "0.0.0.0":
+                    return ip
+            except Exception:
+                pass
+        if attempt < retries - 1:
+            time.sleep(delay)
+    return "?.?.?.?"
 
 
 def generate_welcome_screen():
@@ -176,8 +215,8 @@ def generate_welcome_screen():
         else:
             img = Image.new("RGB", (W, H), color=(10, 10, 26))
 
-        # ── Overlay plein écran semi-transparent (même opacité sur toute la surface) ──
-        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 175))
+        # ── Overlay plein écran semi-transparent 30% ──────────────────────────
+        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 77))
         img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
         draw = ImageDraw.Draw(img)
 
