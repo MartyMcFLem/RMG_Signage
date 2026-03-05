@@ -18,7 +18,7 @@ Ce document décrit l'installation sur Raspberry Pi OS Lite (headless, sans inte
 Une seule commande : télécharge et exécute l'installateur directement.
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash
 ```
 
 ### Option B — Clone puis install
