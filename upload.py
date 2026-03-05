@@ -813,6 +813,13 @@ def restart_mpv():
         # Un redémarrage est déjà en cours
         return
     try:
+        # Blackout tty1 AVANT de tuer mpv : quand mpv libère le DRM, la VT
+        # sous-jacente affiche déjà un fond noir avec curseur masqué.
+        try:
+            with open('/dev/tty1', 'wb') as _tty:
+                _tty.write(b'\033[?25l\033[40m\033[2J\033[H')
+        except Exception:
+            pass
         if mpv_process:
             try:
                 mpv_process.terminate()

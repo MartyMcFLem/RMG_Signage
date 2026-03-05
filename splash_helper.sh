@@ -21,15 +21,20 @@ READY_FILES=(
 _kill_splash() {
   if [ -f "$PIDFILE" ]; then
     PID=$(cat "$PIDFILE")
+    # Blackout tty1 AVANT de tuer mpv : quand DRM revient sur la VT,
+    # le buffer est déjà noir → pas de flash du terminal
+    if [ -c /dev/tty1 ]; then
+      printf "\033[?25l\033[40m\033[2J\033[H" > /dev/tty1 2>/dev/null || true
+    fi
     # Tuer proprement : SIGTERM puis SIGKILL si nécessaire
     kill "$PID" >/dev/null 2>&1 || true
     sleep 0.3
     kill -0 "$PID" >/dev/null 2>&1 && kill -9 "$PID" >/dev/null 2>&1 || true
     rm -f "$PIDFILE"
   fi
-  # Remettre le terminal en mode texte proprement
+  # Maintenir le blackout : curseur masqué + écran noir (évite le flash si DRM déjà libéré)
   if [ -c /dev/tty1 ]; then
-    printf "\033c" > /dev/tty1 2>/dev/null || true
+    printf "\033[?25l\033[40m\033[2J\033[H" > /dev/tty1 2>/dev/null || true
   fi
 }
 
@@ -46,6 +51,12 @@ case "$1" in
       # S'assurer que /run/rmg_signage existe (créé par RuntimeDirectory= systemd
       # mais on crée en fallback au cas où)
       mkdir -p /run/rmg_signage 2>/dev/null || true
+
+      # Préparer tty1 : curseur masqué + fond noir avant que mpv prenne le DRM
+      # (évite le flash du terminal si le boot n'a pas encore noirci l'écran)
+      if [ -c /dev/tty1 ]; then
+        printf "\033[?25l\033[40m\033[2J\033[H" > /dev/tty1 2>/dev/null || true
+      fi
 
       # Lancer mpv en mode DRM pour afficher le splash.
       # --vo=drm     : même backend que le mpv principal → pas de conflit
