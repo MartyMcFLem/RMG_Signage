@@ -3,15 +3,16 @@ set -e
 # RMG Signage — Installateur unifié pour Raspberry Pi OS Lite
 # Usage: sudo bash install.sh [--user <username>] [--media-dir <path>]
 #
-# Ce script :
-#   1. Installe les paquets système nécessaires
-#   2. Crée/configure l'utilisateur et les dossiers
-#   3. Met en place le virtualenv Python
-#   4. Configure le boot silencieux (suppression splash RPi + messages kernel)
-#   5. Génère et déploie le service systemd avec les chemins réels
+# Ce script doit être lancé depuis un clone du repo :
+#   git clone https://github.com/MartyMcFLem/RMG_Signage.git
+#   cd RMG_Signage && sudo bash install.sh
+#
+# Pour une installation en une ligne (sans clone préalable), utilisez bootstrap.sh :
+#   curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash
 
-# ─── Auto-détection du répertoire projet (fonctionne quel que soit le nom du dossier cloné)
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ─── Répertoire projet : priorité à la variable d'environnement (passée par bootstrap.sh),
+#     sinon résolu depuis l'emplacement réel du script courant.
+PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 # ─── Valeurs par défaut
 SERVICE_USER="${RMG_USER:-rmg}"
@@ -48,7 +49,7 @@ echo ""
 # ─── 1. Paquets système
 echo "[1/6] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git mpv fbi python3-venv python3-pip
+apt-get install -y git mpv fbi python3-venv python3-pip fonts-dejavu-core
 
 # ─── 2. Utilisateur et groupes
 echo "[2/6] Configuration de l'utilisateur '$SERVICE_USER'..."
@@ -127,9 +128,9 @@ Environment=RMG_SIGNAGE_MEDIA_DIR=$MEDIA_DIR
 Environment=RMG_SIGNAGE_LOG=$LOG_FILE
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
-ExecStartPre=/bin/bash $PROJECT_DIR/splash_helper.sh start
+ExecStartPre=+/bin/bash $PROJECT_DIR/splash_helper.sh start
 ExecStart=/bin/bash $PROJECT_DIR/start_rmg_signage.sh
-ExecStopPost=/bin/bash $PROJECT_DIR/splash_helper.sh stop
+ExecStopPost=+/bin/bash $PROJECT_DIR/splash_helper.sh stop
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

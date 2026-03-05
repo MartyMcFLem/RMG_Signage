@@ -176,27 +176,8 @@ def generate_welcome_screen():
         else:
             img = Image.new("RGB", (W, H), color=(10, 10, 26))
 
-        # ── Overlay semi-transparent (panneau + fond QR) ────────────────────────
-        qr_size = 200
-        qr_x    = cx - qr_size // 2
-        qr_y    = cy + 165
-        qr_pad  = 12
-        panel_w = 860
-        panel_x = cx - panel_w // 2
-        panel_y = cy - 285
-        panel_h = 680
-
-        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-        ov = ImageDraw.Draw(overlay)
-        ov.rounded_rectangle(
-            [panel_x, panel_y, panel_x + panel_w, panel_y + panel_h],
-            radius=28, fill=(0, 0, 0, 175)
-        )
-        ov.rounded_rectangle(
-            [qr_x - qr_pad, qr_y - qr_pad,
-             qr_x + qr_size + qr_pad, qr_y + qr_size + qr_pad],
-            radius=14, fill=(15, 15, 35, 230)
-        )
+        # ── Overlay plein écran semi-transparent (même opacité sur toute la surface) ──
+        overlay = Image.new('RGBA', (W, H), (0, 0, 0, 175))
         img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
         draw = ImageDraw.Draw(img)
 
@@ -216,17 +197,21 @@ def generate_welcome_screen():
         font_url   = load_font("DejaVuSans-Bold.ttf", 60)
         font_hint  = load_font("DejaVuSans.ttf", 30)
 
+        qr_size = 240
+        qr_x    = cx - qr_size // 2
+        qr_y    = cy + 110
+
         # ── Texte ───────────────────────────────────────────────────────────────
         try:
-            draw.text((cx, cy - 240), "RMG Signage",
+            draw.text((cx, cy - 260), "RMG Signage",
                       fill=(255, 255, 255), font=font_title, anchor="mm")
-            draw.line([(cx - 340, cy - 168), (cx + 340, cy - 168)],
+            draw.line([(cx - 340, cy - 188), (cx + 340, cy - 188)],
                       fill=(70, 70, 110), width=2)
-            draw.text((cx, cy - 105), "Aucun média à afficher",
+            draw.text((cx, cy - 125), "Aucun média à afficher",
                       fill=(140, 140, 165), font=font_sub, anchor="mm")
-            draw.text((cx, cy + 5), url,
+            draw.text((cx, cy - 20), url,
                       fill=(74, 158, 255), font=font_url, anchor="mm")
-            draw.text((cx, cy + 95), "Scannez le QR code ou connectez-vous :",
+            draw.text((cx, cy + 60), "Scannez le QR code ou connectez-vous :",
                       fill=(100, 100, 135), font=font_hint, anchor="mm")
         except TypeError:
             draw.text((50, 80),  "RMG Signage", fill=(255, 255, 255), font=font_title)
@@ -237,17 +222,27 @@ def generate_welcome_screen():
         try:
             import qrcode as _qrcode
             qr = _qrcode.QRCode(
-                box_size=8, border=2,
+                box_size=10, border=3,
                 error_correction=_qrcode.constants.ERROR_CORRECT_M
             )
             qr.add_data(url)
             qr.make(fit=True)
-            qr_img = qr.make_image(
-                fill_color=(74, 158, 255),
-                back_color=(15, 15, 35)
-            ).convert('RGB')
-            qr_img = qr_img.resize((qr_size, qr_size), Image.NEAREST)
-            img.paste(qr_img, (qr_x, qr_y))
+            # make_image() retourne un objet PilImage (wrapper qrcode) ;
+            # on récupère le PIL Image sous-jacent via get_image() si disponible,
+            # sinon on force la conversion directement.
+            qr_wrapped = qr.make_image(fill_color="black", back_color="white")
+            if hasattr(qr_wrapped, 'get_image'):
+                qr_pil = qr_wrapped.get_image().convert('RGB')
+            else:
+                qr_pil = qr_wrapped.convert('RGB')
+            qr_pil = qr_pil.resize((qr_size, qr_size), Image.NEAREST)
+            # Fond blanc légèrement plus grand pour lisibilité du scanner
+            pad = 10
+            draw.rectangle(
+                [qr_x - pad, qr_y - pad, qr_x + qr_size + pad, qr_y + qr_size + pad],
+                fill=(255, 255, 255)
+            )
+            img.paste(qr_pil, (qr_x, qr_y))
         except ImportError:
             # qrcode non installé — on répète l'URL à la place
             draw.text((cx, qr_y + qr_size // 2), url,
