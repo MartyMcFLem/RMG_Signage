@@ -128,6 +128,34 @@
     }
     .card-body { padding: 18px; }
 
+    /* Collapsible card body */
+    .card-body-collapsible {
+      padding: 18px;
+      overflow: hidden;
+      max-height: 1000px;
+      transition: max-height .35s ease, padding .35s ease;
+    }
+    .card-body-collapsible.collapsed {
+      max-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    /* Chevron toggle */
+    .card-head-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-2); padding: 2px 4px;
+      display: flex; align-items: center;
+      transition: color .2s;
+    }
+    .card-head-btn:hover { color: var(--text); }
+    .card-head-btn .chevron {
+      display: inline-block;
+      transition: transform .3s ease;
+      font-style: normal; font-size: 13px;
+    }
+    .card-head-btn.collapsed .chevron { transform: rotate(-90deg); }
+
     /* ── Upload zone ─────────────────────────────────── */
     .upload-zone {
       border: 2px dashed var(--border);
@@ -273,6 +301,20 @@
     }
     .num-input:focus { outline: none; border-color: var(--blue); background: var(--surface); color: var(--text); }
 
+    /* Rotation select */
+    .rot-select {
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    .rot-select:focus { outline: none; border-color: var(--blue); }
+
     /* iOS-style toggle */
     .tog { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
     .tog input { display: none; }
@@ -321,6 +363,8 @@
       aspect-ratio: 1;
       border: 2px solid transparent;
       transition: box-shadow .2s, border-color .2s, transform .15s;
+      transform: translateZ(0); /* force GPU — ensures overflow:hidden clips border-radius */
+      -webkit-transform: translateZ(0);
     }
     .gallery-item:hover      { box-shadow: 0 6px 20px rgba(0,0,0,.12); }
     .gallery-item.selected   { border-color: var(--blue); }
@@ -377,34 +421,95 @@
 
     /* Bottom info bar */
     .item-foot {
-      padding: 6px 8px;
-      background: linear-gradient(transparent, rgba(0,0,0,.65));
-      display: flex; align-items: center; gap: 4px;
+      padding: 0 8px;
+      height: 28px;
+      background: rgba(8, 8, 10, 0.82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border-top: 1px solid rgba(255,255,255,.07);
+      display: flex; align-items: center; gap: 5px;
+      flex-shrink: 0;
     }
     .item-name {
-      font-size: 10px; color: rgba(255,255,255,.88);
+      font-size: 10px; color: rgba(255,255,255,.80);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+      min-width: 0;
     }
-    .vid-badge {
-      background: var(--purple); color: #fff;
+    .type-badge {
       font-size: 9px; font-weight: 700;
-      padding: 2px 5px; border-radius: 3px;
+      padding: 1px 5px; border-radius: 3px;
       letter-spacing: .4px; white-space: nowrap;
+      flex-shrink: 0;
     }
+    .badge-video { background: var(--purple); color: #fff; }
+    .badge-gif   { background: #f97316;       color: #fff; }
+    .badge-img   { background: #0ea5e9;       color: #fff; }
     .dur-pill {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--pill-bg);
-      border: 1px solid var(--pill-border);
-      border-radius: 6px; padding: 4px 6px;
-      min-width: 56px; justify-content: center;
+      display: flex; align-items: center; gap: 2px;
+      flex-shrink: 0;
     }
     .dur-pill input {
-      width: 36px; background: transparent; border: none;
-      color: var(--pill-color); font-size: 12px; font-weight: 700; text-align: center; padding: 0;
+      width: 28px;
+      background: rgba(255,255,255,.12);
+      border: none; border-radius: 4px;
+      color: rgba(255,255,255,.90); font-size: 11px; font-weight: 700;
+      text-align: center; padding: 2px 2px;
     }
-    .dur-pill input:focus { outline: none; }
-    .dur-pill input::placeholder { color: rgba(255,255,255,0.6); }
-    .dur-pill span { font-size: 11px; color: var(--pill-color); }
+    .dur-pill input:focus { outline: none; background: rgba(255,255,255,.20); }
+    .dur-pill input::placeholder { color: rgba(255,255,255,.45); }
+    .dur-pill span { font-size: 10px; color: rgba(255,255,255,.55); }
+
+    /* ── Update card ─────────────────────────────────── */
+    .git-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      min-height: 38px;
+    }
+    .git-info .git-branch {
+      font-weight: 700;
+      color: var(--blue);
+      white-space: nowrap;
+    }
+    .git-info .git-commit {
+      font-family: monospace;
+      font-size: 11px;
+      background: var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      white-space: nowrap;
+      color: var(--text);
+    }
+    .git-info .git-msg {
+      color: var(--text-2);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+    }
+    .update-output {
+      display: none;
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      color: var(--text-2);
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.6;
+    }
+    .update-output.show { display: block; }
+    .ctrl-update { background: var(--blue); color: #fff; grid-column: span 2; }
 
     /* ── Toast ───────────────────────────────────────── */
     .toast {
@@ -432,7 +537,7 @@
            onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'">
       <div id="logoFallback" style="display:none">🖼</div>
     </div>
-    <span class="header-title">Cadre Photo</span>
+    <span class="header-title">Digital Signage Platform</span>
     <span class="header-count" id="headerCount">0 média</span>
   </header>
 
@@ -468,7 +573,7 @@
           </div>
           <div class="now-playing" id="nowPlaying">
             <span class="np-dot"></span>
-            <span>Affichage unique : <strong id="nowPlayingName"></strong></span>
+            <span>En cours d'affichage : <strong id="nowPlayingName"></strong></span>
           </div>
           <div class="ctrl-grid">
             <button class="ctrl-btn ctrl-restart" onclick="control('restart')">↻ Redémarrer</button>
@@ -482,8 +587,13 @@
 
       <!-- Paramètres -->
       <div class="card">
-        <div class="card-head"><h2>Paramètres</h2></div>
-        <div class="card-body">
+        <div class="card-head">
+          <h2>Paramètres</h2>
+          <button class="card-head-btn" id="paramToggleBtn" onclick="toggleParams()" title="Réduire / Développer">
+            <i class="chevron">&#8964;</i>
+          </button>
+        </div>
+        <div class="card-body-collapsible" id="paramsBody">
           <div class="setting-row">
             <div>
               <div class="setting-label">Durée par défaut</div>
@@ -524,8 +634,20 @@
           </div>
           <div class="setting-row">
             <div>
+              <div class="setting-label">Rotation affichage</div>
+              <div class="setting-hint">Rotation de l&rsquo;écran (sens horaire)</div>
+            </div>
+            <select class="rot-select" id="rotation" onchange="updateConfig()">
+              <option value="0">0° (normal)</option>
+              <option value="90">90°</option>
+              <option value="180">180° (inversé)</option>
+              <option value="270">270°</option>
+            </select>
+          </div>
+          <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:10px;">
+            <div>
               <div class="setting-label">Logo</div>
-              <div class="setting-hint">Modifier le logo affiché en haut à gauche</div>
+              <div class="setting-hint">Modifier le logo affiché en haut à gauche (512x512px recommandé)</div>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
               <img id="logoPreview" src="/static/logo.png" alt="Preview"
@@ -533,10 +655,26 @@
                    onerror="this.style.display='none'">
               <input type="file" id="logoInput" accept="image/*" style="display:none"
                      onchange="uploadLogo(this.files)">
-              <button class="ctrl-btn" onclick="document.getElementById('logoInput').click()">Changer</button>
+              <button class="ctrl-btn" onclick="var i=document.getElementById('logoInput');i.value='';i.click()">Changer</button>
               <button class="ctrl-btn ctrl-restart" onclick="removeLogo()">Supprimer</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Mise à jour -->
+      <div class="card">
+        <div class="card-head"><h2>Mise à jour</h2></div>
+        <div class="card-body">
+          <div class="git-info" id="gitInfo">
+            <span style="color:var(--text-2);font-size:12px">Chargement…</span>
+          </div>
+          <div class="ctrl-grid">
+            <button class="ctrl-btn ctrl-update" id="updateBtn" onclick="runUpdate()">
+              ↑ Mettre à jour depuis GitHub
+            </button>
+          </div>
+          <div class="update-output" id="updateOutput"></div>
         </div>
       </div>
 
@@ -574,7 +712,9 @@
     let toastTimer = null;
 
     const VIDEO_EXT = /\.(mp4|avi|mkv|mov|webm|m4v)$/i;
+    const GIF_EXT   = /\.gif$/i;
     const isVideo = f => VIDEO_EXT.test(f);
+    const isGif   = f => GIF_EXT.test(f);
 
     // ── Toast ─────────────────────────────────────────────
     function showToast(msg) {
@@ -596,6 +736,8 @@
         document.getElementById('darkMode').checked = !!cfg.dark_mode;
         applyDarkMode(!!cfg.dark_mode);
       }
+      const rotEl = document.getElementById('rotation');
+      if (rotEl) rotEl.value = String(cfg.rotation ?? 0);
       refreshNowPlaying(cfg);
       // hide mpv status badge; confirmations use toasts
       const mpv = document.getElementById('mpvStatus');
@@ -620,13 +762,18 @@
         shuffle: document.getElementById('shuffle').checked,
         loop:    document.getElementById('loop').checked,
       };
-      if (document.getElementById('darkMode')) payload.dark_mode = document.getElementById('darkMode').checked;
+      const darkModeEl = document.getElementById('darkMode');
+      if (darkModeEl) payload.dark_mode = darkModeEl.checked;
+      const rotEl = document.getElementById('rotation');
+      if (rotEl) payload.rotation = parseInt(rotEl.value);
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (darkModeEl) applyDarkMode(darkModeEl.checked);
       showToast('Paramètres enregistrés');
+      loadConfig();
       loadGallery();
     }
 
@@ -667,6 +814,7 @@
       document.getElementById('gallery').innerHTML = sorted.map((file, i) => {
         const sel       = cfg.single_file_mode && cfg.selected_file === file;
         const video     = isVideo(file);
+        const gif       = isGif(file);
         const customDur = cfg.file_durations?.[file] ?? '';
         const defDur    = cfg.image_duration;
         const safeFile  = file.replace(/"/g, '&quot;');
@@ -688,10 +836,10 @@
                 <button class="ia-btn ia-del"  onclick="_gDelete(${i})" title="Supprimer">&#10005;</button>
               </div>
               <div class="item-foot">
+                <span class="type-badge ${video ? 'badge-video' : gif ? 'badge-gif' : 'badge-img'}">${video ? 'VIDEO' : gif ? 'GIF' : 'IMG'}</span>
                 <span class="item-name">${file}</span>
-                ${video
-                  ? '<span class="vid-badge">VIDEO</span>'
-                  : `<div class="dur-pill" onclick="event.stopPropagation()">
+                ${!video
+                  ? `<div class="dur-pill" onclick="event.stopPropagation()">
                        <input type="number"
                               value="${customDur}"
                               placeholder="${defDur}"
@@ -701,6 +849,7 @@
                               onclick="event.stopPropagation()">
                        <span>s</span>
                      </div>`
+                  : ''
                 }
               </div>
             </div>
@@ -753,19 +902,25 @@
       if (!files || !files.length) return;
       const fd = new FormData();
       fd.append('logo', files[0]);
-      const res = await fetch('/api/logo', { method: 'POST', body: fd });
-      if (res.ok) {
-        // force cache-bust
-        document.getElementById('siteLogo').src = '/static/logo.png?v=' + Date.now();
-        const pv = document.getElementById('logoPreview');
-        if (pv) pv.src = '/static/logo.png?v=' + Date.now();
-        document.getElementById('siteLogo').style.display = 'block';
-        document.getElementById('logoFallback').style.display = 'none';
-        if (pv) pv.style.display = 'block';
-        showToast('Logo mis à jour');
-      } else {
-        const data = await res.json().catch(() => ({}));
-        showToast('Erreur: ' + (data.message || res.statusText));
+      // Reset input so the same file can be re-selected next time
+      document.getElementById('logoInput').value = '';
+      try {
+        const res = await fetch('/api/logo', { method: 'POST', body: fd });
+        if (res.ok) {
+          // force cache-bust
+          const v = '?v=' + Date.now();
+          document.getElementById('siteLogo').src = '/static/logo.png' + v;
+          const pv = document.getElementById('logoPreview');
+          if (pv) { pv.src = '/static/logo.png' + v; pv.style.display = 'block'; }
+          document.getElementById('siteLogo').style.display = 'block';
+          document.getElementById('logoFallback').style.display = 'none';
+          showToast('Logo mis à jour');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          showToast('Erreur: ' + (data.message || res.statusText));
+        }
+      } catch (err) {
+        showToast('Erreur réseau : impossible de contacter le serveur');
       }
     }
 
@@ -864,11 +1019,81 @@
       const res  = await fetch('/api/control/' + action, { method: 'POST' });
       const data = await res.json();
       showToast(data.message);
+      loadConfig();
+      loadGallery();
+    }
+
+    // ── Collapsible params ─────────────────────────────────
+    function toggleParams() {
+      const body = document.getElementById('paramsBody');
+      const btn  = document.getElementById('paramToggleBtn');
+      body.classList.toggle('collapsed');
+      btn.classList.toggle('collapsed');
+    }
+
+    // ── Git update ────────────────────────────────────
+    async function loadGitStatus() {
+      try {
+        const data = await fetch('/api/update/status').then(r => r.json());
+        const el = document.getElementById('gitInfo');
+        if (data.success) {
+          const upToDate = data.up_to_date;
+          const badge = upToDate === false
+            ? `<span style="margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:#f97316;color:#fff;white-space:nowrap">MISE À JOUR DISPO</span>`
+            : upToDate === true
+              ? `<span style="margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--green);color:#fff;white-space:nowrap">À JOUR</span>`
+              : '';
+          el.innerHTML =
+            `<span>&#x2387;</span>` +
+            `<span class="git-branch">main</span>` +
+            `<span class="git-commit">${data.commit}</span>` +
+            `<span class="git-msg">${data.last_message}</span>` +
+            badge;
+        } else {
+          el.innerHTML = `<span style="color:var(--red)">${data.message || 'git non disponible'}</span>`;
+        }
+      } catch (e) {
+        document.getElementById('gitInfo').innerHTML =
+          '<span style="color:var(--text-2)">git non disponible</span>';
+      }
+    }
+
+    async function runUpdate() {
+      const btn = document.getElementById('updateBtn');
+      const out = document.getElementById('updateOutput');
+      btn.disabled = true;
+      btn.textContent = '⏳ Mise à jour en cours…';
+      out.classList.remove('show');
+      try {
+        const data = await fetch('/api/update', { method: 'POST' }).then(r => r.json());
+        out.textContent = data.output || data.message || '';
+        out.classList.add('show');
+        if (data.success) {
+          showToast(data.message);
+          if (data.updated) {
+            btn.textContent = '✓ Redémarrage en cours…';
+            // Le service va redémarrer — on attend 4s puis on recharge
+            setTimeout(() => location.reload(), 4000);
+            return;
+          } else {
+            loadGitStatus();
+          }
+        } else {
+          showToast('Erreur : ' + data.message);
+        }
+      } catch (e) {
+        out.textContent = 'Erreur réseau';
+        out.classList.add('show');
+        showToast('Erreur réseau');
+      }
+      btn.disabled = false;
+      btn.textContent = '↑ Mettre à jour depuis GitHub';
     }
 
     // ── Init ──────────────────────────────────────────────
     loadConfig();
     loadGallery();
+    loadGitStatus();
     setInterval(() => { if (!isDragging) loadGallery(); }, 5000);
   </script>
 </body>

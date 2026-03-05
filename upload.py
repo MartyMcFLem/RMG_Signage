@@ -1,4 +1,5 @@
 from flask import Flask, request, redirect, jsonify, send_from_directory, render_template
+from werkzeug.utils import secure_filename
 import os
 import threading
 import subprocess
@@ -13,7 +14,9 @@ MEDIA_DIR = os.environ.get("PHOTOFRAME_MEDIA_DIR", "/home/pi/cadre")
 CONFIG_FILE = os.environ.get("PHOTOFRAME_CONFIG_FILE", os.path.join(MEDIA_DIR, "config.json"))
 
 MPV_BINARY = shutil.which("mpv") or "mpv"
+GIT_BINARY = shutil.which("git") or "/usr/bin/git"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
+MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/pi/.config/mpv")
 LOG_FILE = os.path.join(MEDIA_DIR, "photoframe-mpv.log")
 
 # Configuration par défaut
@@ -22,6 +25,7 @@ config = {
     "shuffle": True,
     "loop": True,
     "dark_mode": False,
+    "rotation": 0,           # rotation affichage : 0, 90, 180, 270
     "single_file_mode": False,
     "selected_file": None,
     "file_order": [],        # ordre personnalisé des fichiers
@@ -36,7 +40,18 @@ if os.path.exists(CONFIG_FILE):
         pass
 
 mpv_process = None
+_mpv_lock = threading.Lock()
 MPV_SOCKET = "/tmp/mpv-socket"
+
+# Taille maximale d'upload : 500 Mo
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024
+
+# Extensions media autorisées à l'upload
+ALLOWED_UPLOAD_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
+    '.heic', '.heif',
+    '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'
+}
 
 
 def send_mpv_command(command):
@@ -87,7 +102,7 @@ def is_media_file(filename):
 
 def generate_lua_script():
     """Génère le script Lua mpv pour appliquer les durées personnalisées par fichier"""
-    mpv_conf_dir = os.path.join(MEDIA_DIR, ".config")
+    mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
     os.makedirs(mpv_conf_dir, exist_ok=True)
     script_path = os.path.join(mpv_conf_dir, "per_file_duration.lua")
     # Utiliser des slashes Unix dans le script Lua (tourne sur Raspberry Pi)
@@ -122,7 +137,7 @@ def generate_lua_script():
 
 def get_mpv_cmd():
     """Génère la commande mpv avec la config actuelle"""
-    mpv_conf_dir = os.path.join(MEDIA_DIR, ".config")
+    mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
     os.makedirs(mpv_conf_dir, exist_ok=True)
 
     lua_script = generate_lua_script()
@@ -135,8 +150,11 @@ def get_mpv_cmd():
             f.write("border=no\n")
             f.write("osd-bar=no\n")
             f.write("background-color=#000000\n")
-            f.write("vf=scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos\n")
+            f.write("alpha=blend\n")  # Fond transparent PNG → fondu sur background-color (évite le damier)
+            base_vf = "scale=min(4096,iw):min(4096,ih):force_original_aspect_ratio=decrease:flags=lanczos"
+            f.write(f"vf={base_vf}\n")
             f.write(f"image-display-duration={config['image_duration']}\n")
+            f.write(f"video-rotate={config.get('rotation', 0)}\n")
             f.write(f"input-ipc-server={MPV_SOCKET}\n")
     except:
         pass
@@ -184,6 +202,7 @@ def get_mpv_cmd():
 
 # === FLASK APP ===
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -191,9 +210,18 @@ def upload():
     if request.method == "POST":
         files = request.files.getlist("files")
         for f in files:
-            if f.filename:
-                path = os.path.join(MEDIA_DIR, f.filename)
-                f.save(path)
+            if not f.filename:
+                continue
+            # Sécuriser le nom de fichier (évite path traversal)
+            safe_name = secure_filename(f.filename)
+            if not safe_name:
+                continue
+            # Vérifier l'extension
+            ext = os.path.splitext(safe_name.lower())[1]
+            if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+                continue
+            path = os.path.join(MEDIA_DIR, safe_name)
+            f.save(path)
         return redirect("/")
 
     return render_template('index.html')
@@ -307,6 +335,8 @@ def manage_config():
                 restart_mpv()
             elif old_config.get('shuffle') != config.get('shuffle'):
                 restart_mpv()
+            elif old_config.get('rotation') != config.get('rotation'):
+                restart_mpv()
         else:
             restart_mpv()
 
@@ -400,8 +430,118 @@ def play_all_files():
     return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
 
 
+@app.route("/api/update/status", methods=["GET"])
+def update_git_status():
+    """Retourne les informations git actuelles (branche locale + dernier commit de origin/main)"""
+    script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
+    try:
+        # État local
+        commit = subprocess.check_output(
+            [GIT_BINARY, "rev-parse", "--short", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        branch = subprocess.check_output(
+            [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        msg = subprocess.check_output(
+            [GIT_BINARY, "log", "-1", "--pretty=%s"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        # Hash du dernier commit sur origin/main (fetch silencieux)
+        try:
+            subprocess.check_output(
+                [GIT_BINARY, "fetch", "origin", "main"],
+                cwd=script_dir, stderr=subprocess.STDOUT
+            )
+            remote_commit = subprocess.check_output(
+                [GIT_BINARY, "rev-parse", "--short", "origin/main"],
+                cwd=script_dir, stderr=subprocess.STDOUT
+            ).decode().strip()
+        except Exception:
+            remote_commit = None
+        return jsonify({
+            "success": True,
+            "commit": commit,
+            "branch": branch,
+            "last_message": msg,
+            "remote_commit": remote_commit,
+            "up_to_date": commit == remote_commit if remote_commit else None
+        })
+    except subprocess.CalledProcessError as e:
+        return jsonify({"success": False, "message": e.output.decode().strip()})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
+@app.route("/api/update", methods=["POST"])
+def update_from_github():
+    """Bascule sur main, aligne sur origin/main et redémarre si nécessaire"""
+    script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
+    try:
+        before = subprocess.check_output(
+            [GIT_BINARY, "rev-parse", "--short", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        # 1. Récupérer origin/main
+        fetch_out = subprocess.check_output(
+            [GIT_BINARY, "fetch", "origin", "main"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        # 2. Basculer sur main si ce n'est pas déjà la branche active
+        current_branch = subprocess.check_output(
+            [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        checkout_out = ""
+        if current_branch != "main":
+            checkout_out = subprocess.check_output(
+                [GIT_BINARY, "checkout", "main"],
+                cwd=script_dir, stderr=subprocess.STDOUT
+            ).decode().strip()
+
+        # 3. Aligner strictement sur origin/main (ignore toute modif locale)
+        reset_out = subprocess.check_output(
+            [GIT_BINARY, "reset", "--hard", "origin/main"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        after = subprocess.check_output(
+            [GIT_BINARY, "rev-parse", "--short", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        output_lines = [l for l in [fetch_out, checkout_out, reset_out] if l]
+        pull_out = "\n".join(output_lines)
+
+        updated = before != after
+        if updated:
+            def delayed_restart():
+                time.sleep(1.5)
+                subprocess.Popen(["sudo", "systemctl", "restart", "photoframe"])
+            threading.Thread(target=delayed_restart, daemon=True).start()
+
+        return jsonify({
+            "success": True,
+            "updated": updated,
+            "branch": "main",
+            "before": before,
+            "after": after,
+            "output": pull_out,
+            "message": "Mise à jour effectuée, redémarrage en cours…" if updated else "Déjà à jour"
+        })
+    except subprocess.CalledProcessError as e:
+        return jsonify({"success": False, "message": e.output.decode().strip()}), 500
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 def start_flask():
-    app.run(host="0.0.0.0", port=5000)
+    # use_reloader=False évite le double fork qui casserait le thread MPV
+    # threaded=True permet les requêtes concurrentes
+    app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False)
 
 
 def start_mpv():
@@ -434,7 +574,18 @@ def start_mpv():
     last_exception = None
     for vo_args in vo_candidates:
         attempt_cmd = list(cmd)
-        new_cmd = attempt_cmd[:1] + vo_args + extra_list + attempt_cmd[1:]
+        # Ensure --config-dir is passed immediately after the mpv binary
+        config_arg = None
+        rest_args = attempt_cmd[1:]
+        for a in attempt_cmd[1:]:
+            if isinstance(a, str) and a.startswith("--config-dir="):
+                config_arg = a
+                rest_args = [x for x in attempt_cmd[1:] if x != config_arg]
+                break
+        if config_arg:
+            new_cmd = attempt_cmd[:1] + [config_arg] + vo_args + extra_list + rest_args
+        else:
+            new_cmd = attempt_cmd[:1] + vo_args + extra_list + attempt_cmd[1:]
 
         try:
             with open(LOG_FILE, "ab") as logf:
@@ -484,14 +635,24 @@ def start_mpv():
 
 
 def restart_mpv():
-    """Redémarre MPV"""
+    """Redémarre MPV (protégé par verrou pour éviter les lancements multiples)"""
     global mpv_process
-    if mpv_process:
-        try:
-            mpv_process.terminate()
-            mpv_process.wait(timeout=2)
-        except:
-            mpv_process.kill()
+    if not _mpv_lock.acquire(blocking=False):
+        # Un redémarrage est déjà en cours
+        return
+    try:
+        if mpv_process:
+            try:
+                mpv_process.terminate()
+                mpv_process.wait(timeout=2)
+            except Exception:
+                try:
+                    mpv_process.kill()
+                except Exception:
+                    pass
+        mpv_process = None
+    finally:
+        _mpv_lock.release()
     threading.Thread(target=start_mpv, daemon=True).start()
 
 
@@ -506,7 +667,11 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"⚠️ Impossible de créer config.json : {e}")
 
-    flask_thread = threading.Thread(target=start_flask, daemon=True)
-    flask_thread.start()
+    # MPV tourne en thread daemon : quand restart_mpv() le tue, proc.wait() retourne
+    # et le thread s'arrête proprement sans emporter toute l'application.
+    mpv_thread = threading.Thread(target=start_mpv, daemon=True)
+    mpv_thread.start()
 
-    start_mpv()
+    # Flask bloque le thread principal (non-daemon) → le processus reste en vie
+    # même après un redémarrage mpv.
+    start_flask()
