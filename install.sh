@@ -59,7 +59,7 @@ if ! id "$SERVICE_USER" &>/dev/null; then
   useradd -m -s /bin/bash "$SERVICE_USER"
   echo "  → Utilisateur '$SERVICE_USER' créé"
 fi
-usermod -aG video,input "$SERVICE_USER" 2>/dev/null || true
+usermod -aG video,input,tty "$SERVICE_USER" 2>/dev/null || true
 
 # ─── 3. Dossiers et permissions
 echo "[3/6] Création des dossiers..."
@@ -100,8 +100,8 @@ if [ -n "$CONFIG_FILE" ]; then
     cp "$CMDLINE_FILE" "$CMDLINE_FILE.bak"
     # Redirectionner les messages boot vers tty3 (écran vide pour l'utilisateur)
     sed -i 's/console=tty1/console=tty3/g' "$CMDLINE_FILE"
-    # Masquer les messages kernel et le logo
-    sed -i 's/$/ quiet loglevel=0 logo.nologo rd.systemd.show_status=false/' "$CMDLINE_FILE"
+    # Masquer les messages kernel, le logo et le curseur clignotant
+    sed -i 's/$/ quiet loglevel=3 logo.nologo vt.global_cursor_default=0 rd.systemd.show_status=false/' "$CMDLINE_FILE"
   fi
   echo "  → Boot silencieux configuré ($CONFIG_FILE)"
 else
