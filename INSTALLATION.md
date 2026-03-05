@@ -18,7 +18,7 @@ Ce document décrit l'installation sur Raspberry Pi OS Lite (headless, sans inte
 Une seule commande : clone le projet dans `/opt/rmg_signage` et installe tout automatiquement.
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash
 ```
 
 ### Option B — Clone puis install
