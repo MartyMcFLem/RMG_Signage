@@ -658,7 +658,6 @@
               ↑ Mettre à jour
             </button>
           </div>
-          <div class="update-output" id="updateOutput"></div>
         </div>
       </div>
 
@@ -1042,30 +1041,23 @@
 
     async function runUpdate() {
       const btn = document.getElementById('updateBtn');
-      const out = document.getElementById('updateOutput');
       btn.disabled = true;
       btn.textContent = '⏳ Mise à jour en cours…';
-      out.classList.remove('show');
       try {
         const data = await fetch('/api/update', { method: 'POST' }).then(r => r.json());
-        out.textContent = data.output || data.message || '';
-        out.classList.add('show');
         if (data.success) {
-          showToast(data.message);
           if (data.updated) {
             btn.textContent = '✓ Redémarrage en cours…';
-            // Le service va redémarrer — on attend 4s puis on recharge
             setTimeout(() => location.reload(), 4000);
             return;
           } else {
+            showToast('Déjà à jour');
             loadGitStatus();
           }
         } else {
           showToast('Erreur : ' + data.message);
         }
       } catch (e) {
-        out.textContent = 'Erreur réseau';
-        out.classList.add('show');
         showToast('Erreur réseau');
       }
       btn.disabled = false;
