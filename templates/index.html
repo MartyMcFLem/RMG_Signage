@@ -1037,11 +1037,18 @@
         const data = await fetch('/api/update/status').then(r => r.json());
         const el = document.getElementById('gitInfo');
         if (data.success) {
+          const upToDate = data.up_to_date;
+          const badge = upToDate === false
+            ? `<span style="margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:#f97316;color:#fff;white-space:nowrap">MISE À JOUR DISPO</span>`
+            : upToDate === true
+              ? `<span style="margin-left:auto;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--green);color:#fff;white-space:nowrap">À JOUR</span>`
+              : '';
           el.innerHTML =
             `<span>&#x2387;</span>` +
-            `<span class="git-branch">${data.branch}</span>` +
+            `<span class="git-branch">main</span>` +
             `<span class="git-commit">${data.commit}</span>` +
-            `<span class="git-msg">${data.last_message}</span>`;
+            `<span class="git-msg">${data.last_message}</span>` +
+            badge;
         } else {
           el.innerHTML = `<span style="color:var(--red)">${data.message || 'git non disponible'}</span>`;
         }

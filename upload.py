@@ -14,6 +14,7 @@ MEDIA_DIR = os.environ.get("PHOTOFRAME_MEDIA_DIR", "/home/pi/cadre")
 CONFIG_FILE = os.environ.get("PHOTOFRAME_CONFIG_FILE", os.path.join(MEDIA_DIR, "config.json"))
 
 MPV_BINARY = shutil.which("mpv") or "mpv"
+GIT_BINARY = shutil.which("git") or "/usr/bin/git"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
 MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/pi/.config/mpv")
 LOG_FILE = os.path.join(MEDIA_DIR, "photoframe-mpv.log")
@@ -431,22 +432,42 @@ def play_all_files():
 
 @app.route("/api/update/status", methods=["GET"])
 def update_git_status():
-    """Retourne les informations git actuelles (branche, commit, message)"""
+    """Retourne les informations git actuelles (branche locale + dernier commit de origin/main)"""
     script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
     try:
+        # État local
         commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
+            [GIT_BINARY, "rev-parse", "--short", "HEAD"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
         branch = subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
         msg = subprocess.check_output(
-            ["git", "log", "-1", "--pretty=%s"],
+            [GIT_BINARY, "log", "-1", "--pretty=%s"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
-        return jsonify({"success": True, "commit": commit, "branch": branch, "last_message": msg})
+        # Hash du dernier commit sur origin/main (fetch silencieux)
+        try:
+            subprocess.check_output(
+                [GIT_BINARY, "fetch", "origin", "main"],
+                cwd=script_dir, stderr=subprocess.STDOUT
+            )
+            remote_commit = subprocess.check_output(
+                [GIT_BINARY, "rev-parse", "--short", "origin/main"],
+                cwd=script_dir, stderr=subprocess.STDOUT
+            ).decode().strip()
+        except Exception:
+            remote_commit = None
+        return jsonify({
+            "success": True,
+            "commit": commit,
+            "branch": branch,
+            "last_message": msg,
+            "remote_commit": remote_commit,
+            "up_to_date": commit == remote_commit if remote_commit else None
+        })
     except subprocess.CalledProcessError as e:
         return jsonify({"success": False, "message": e.output.decode().strip()})
     except Exception as e:
@@ -455,28 +476,45 @@ def update_git_status():
 
 @app.route("/api/update", methods=["POST"])
 def update_from_github():
-    """Fait un git pull origin <branche> puis redémarre le service si du nouveau code est arrivé"""
+    """Bascule sur main, aligne sur origin/main et redémarre si nécessaire"""
     script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
     try:
         before = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
+            [GIT_BINARY, "rev-parse", "--short", "HEAD"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
 
-        pull_out = subprocess.check_output(
-            ["git", "pull"],
+        # 1. Récupérer origin/main
+        fetch_out = subprocess.check_output(
+            [GIT_BINARY, "fetch", "origin", "main"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        # 2. Basculer sur main si ce n'est pas déjà la branche active
+        current_branch = subprocess.check_output(
+            [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        checkout_out = ""
+        if current_branch != "main":
+            checkout_out = subprocess.check_output(
+                [GIT_BINARY, "checkout", "main"],
+                cwd=script_dir, stderr=subprocess.STDOUT
+            ).decode().strip()
+
+        # 3. Aligner strictement sur origin/main (ignore toute modif locale)
+        reset_out = subprocess.check_output(
+            [GIT_BINARY, "reset", "--hard", "origin/main"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
 
         after = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
+            [GIT_BINARY, "rev-parse", "--short", "HEAD"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
 
-        branch = subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
-        ).decode().strip()
+        output_lines = [l for l in [fetch_out, checkout_out, reset_out] if l]
+        pull_out = "\n".join(output_lines)
 
         updated = before != after
         if updated:
@@ -488,7 +526,7 @@ def update_from_github():
         return jsonify({
             "success": True,
             "updated": updated,
-            "branch": branch,
+            "branch": "main",
             "before": before,
             "after": after,
             "output": pull_out,
