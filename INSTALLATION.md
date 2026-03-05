@@ -1,61 +1,137 @@
-# 🖼️ PhotoFrame — Installation (Raspberry Pi OS Lite)
+# RMG Signage — Installation (Raspberry Pi OS Lite)
 
-Ce document décrit l'installation et le dépannage pour un usage headless
-sur Raspberry Pi OS Lite (sans serveur graphique). L'installation fournie
-déploie un service systemd qui lance le script de démarrage.
+Ce document décrit l'installation sur Raspberry Pi OS Lite (headless, sans interface graphique).
 
-## Installation rapide
+## Prérequis
 
-Depuis le dossier du projet sur le Raspberry Pi :
+- Raspberry Pi (3B+, 4, 5 ou Zero 2W recommandé)
+- Raspberry Pi OS Lite (Bookworm ou Bullseye) flashé sur carte SD
+- Accès SSH ou clavier/écran
 
-```bash
-# Rendre le script exécutable (optionnel)
-chmod +x install.sh
+## Installation en une commande
 
-# Déployer le service systemd
-sudo ./install.sh
-```
+> **Le dépôt doit être public** pour utiliser la méthode HTTPS sans credentials.
+> Si votre fork est privé, consultez la section [Dépôt privé](#dépôt-privé) ci-dessous.
 
-Suivre les logs :
+### Option A — Bootstrap (tout-en-un, recommandé)
 
-```bash
-sudo journalctl -u photoframe -f
-```
-
-## Dépendances système recommandées
+Une seule commande : télécharge et exécute l'installateur directement.
 
 ```bash
-sudo apt update
-sudo apt install -y mpv fbi python3-venv python3-pip
-sudo usermod -aG video,input pi
+curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/install.sh | sudo bash
 ```
 
-## Virtualenv (optionnel)
+### Option B — Clone puis install
 
 ```bash
-python3 -m venv /home/pi/PhotoFrame/venv
-source /home/pi/PhotoFrame/venv/bin/activate
-pip install -r /home/pi/PhotoFrame/requirements.txt
-deactivate
+# 1. Cloner le projet
+git clone https://github.com/MartyMcFLem/RMG_Signage.git
+cd RMG_Signage
+
+# 2. Lancer l'installateur (en tant que root)
+sudo bash install.sh
 ```
+
+C'est tout. Le script `install.sh` fait tout automatiquement :
+- Installe les paquets système (`mpv`, `fbi`, `python3-venv`, `git`)
+- Crée les dossiers nécessaires
+- Met en place le virtualenv Python et installe les dépendances
+- **Configure le boot silencieux** (supprime le splash RPi et les messages kernel)
+- Génère et déploie le service systemd avec les chemins réels du projet
+
+### Options disponibles
+
+```bash
+# Changer l'utilisateur système (défaut : rmg)
+sudo bash install.sh --user pi
+
+# Changer le dossier des médias
+sudo bash install.sh --media-dir /mnt/usb/medias
+
+# Combiné
+sudo bash install.sh --user pi --media-dir /mnt/usb/medias
+```
+
+## Boot silencieux
+
+Après installation et reboot, le Pi démarre silencieusement :
+- Pas de carré arc-en-ciel RPi
+- Pas de messages kernel défilants
+- Écran noir → splash RMG (si `static/splash.png` existe) → médias
+
+Pour le splash personnalisé, déposez votre image dans `static/splash.png`
+(PNG recommandé, résolution de l'écran cible).
 
 ## Emplacements importants
 
-- Service systemd : `/etc/systemd/system/photoframe.service` (vérifiez `User`, `WorkingDirectory`, `ExecStart`)
-- Dossier médias : `/home/pi/cadre` (modifiable via `PHOTOFRAME_MEDIA_DIR`)
-- Script de démarrage : `start_photoframe.sh`
+| Élément | Chemin |
+|---|---|
+| Projet | Auto-détecté (chemin du `git clone`) |
+| Médias | `/home/rmg/signage/medias` |
+| Log application | `/home/rmg/rmg_signage.log` |
+| Log MPV | `/home/rmg/signage/medias/rmg_signage-mpv.log` |
+| Service systemd | `/etc/systemd/system/rmg_signage.service` |
+| Interface web | `http://<ip-du-pi>:5000` |
+
+## Gestion du service
+
+```bash
+# Voir les logs en temps réel
+sudo journalctl -u rmg_signage -f
+
+# Statut
+sudo systemctl status rmg_signage
+
+# Redémarrer
+sudo systemctl restart rmg_signage
+
+# Arrêter
+sudo systemctl stop rmg_signage
+```
+
+## Mise à jour
+
+Depuis l'interface web → section "Mise à jour" → bouton "Mettre à jour".
+
+Ou manuellement :
+```bash
+cd /chemin/vers/RMG_Signage
+git pull origin main
+sudo systemctl restart rmg_signage
+```
+
+## Dépôt privé
+
+Si vous travaillez sur un fork privé, utilisez une clé SSH deploy :
+
+```bash
+# Générer une clé SSH dédiée (sans passphrase pour l'automatisation)
+ssh-keygen -t ed25519 -C "rmg-signage-deploy" -f ~/.ssh/rmg_deploy -N ""
+
+# Afficher la clé publique → copiez-la dans GitHub :
+# Settings → Deploy keys → Add deploy key (lecture seule suffit)
+cat ~/.ssh/rmg_deploy.pub
+
+# Cloner via SSH
+git clone git@github.com:MartyMcFLem/RMG_Signage.git
+```
 
 ## Dépannage
 
-- Voir les logs du service : `sudo journalctl -u photoframe -f`
-- Tester manuellement :
-
+**Le service ne démarre pas**
 ```bash
-cd /home/pi/PhotoFrame
-python3 upload.py
+sudo journalctl -u rmg_signage -n 50
+cat /home/rmg/rmg_signage.log
 ```
 
----
+**MPV ne lit pas les médias**
+```bash
+cat /home/rmg/signage/medias/rmg_signage-mpv.log
+```
 
-Si vous souhaitez réactiver une option graphique (autostart/.desktop), dites‑le et je
-préparerai une branche séparée contenant les fichiers et instructions correspondants.
+**Réinstaller proprement**
+```bash
+sudo systemctl stop rmg_signage
+sudo bash install.sh
+```
+

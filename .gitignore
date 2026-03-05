@@ -1,0 +1,22 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Logs
+*.log
+logs/
+
+# Données runtime (ne pas versionner les médias ni la config locale)
+static/medias/
+config.json
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Backups créés par install.sh
+*.bak
