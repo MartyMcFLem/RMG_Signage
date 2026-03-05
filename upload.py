@@ -429,6 +429,77 @@ def play_all_files():
     return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
 
 
+@app.route("/api/update/status", methods=["GET"])
+def update_git_status():
+    """Retourne les informations git actuelles (branche, commit, message)"""
+    script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        msg = subprocess.check_output(
+            ["git", "log", "-1", "--pretty=%s"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+        return jsonify({"success": True, "commit": commit, "branch": branch, "last_message": msg})
+    except subprocess.CalledProcessError as e:
+        return jsonify({"success": False, "message": e.output.decode().strip()})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
+@app.route("/api/update", methods=["POST"])
+def update_from_github():
+    """Fait un git pull origin <branche> puis redémarre le service si du nouveau code est arrivé"""
+    script_dir = os.environ.get("PHOTOFRAME_DIR", "/home/pi/PhotoFrame")
+    try:
+        before = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        pull_out = subprocess.check_output(
+            ["git", "pull"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        after = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=script_dir, stderr=subprocess.STDOUT
+        ).decode().strip()
+
+        updated = before != after
+        if updated:
+            def delayed_restart():
+                time.sleep(1.5)
+                subprocess.Popen(["sudo", "systemctl", "restart", "photoframe"])
+            threading.Thread(target=delayed_restart, daemon=True).start()
+
+        return jsonify({
+            "success": True,
+            "updated": updated,
+            "branch": branch,
+            "before": before,
+            "after": after,
+            "output": pull_out,
+            "message": "Mise à jour effectuée, redémarrage en cours…" if updated else "Déjà à jour"
+        })
+    except subprocess.CalledProcessError as e:
+        return jsonify({"success": False, "message": e.output.decode().strip()}), 500
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 def start_flask():
     # use_reloader=False évite le double fork qui casserait le thread MPV
     # threaded=True permet les requêtes concurrentes
