@@ -1,46 +1,58 @@
 #!/bin/bash
-# Helper to display/clear a splash image on tty1 using fbi (framebuffer imageviewer)
-SPLASH_IMG="/home/rmg/PhotoFrame/static/splash.png"
-PIDFILE="/run/rmg_signage-splash.pid"
+# Helper pour afficher/effacer le splash RMG sur tty1 via fbi (framebuffer)
+# Utilisé par le service systemd en ExecStartPre / ExecStopPost.
+
+# L'image splash est cherchée dans static/ du projet courant (chemin relatif au script)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPLASH_IMG="$SCRIPT_DIR/static/splash.png"
+PIDFILE="/run/rmg_signage/splash.pid"
+
+# Emplacements possibles du fichier "ready" (cohérent avec start_rmg_signage.sh)
+READY_FILES=(
+  "/run/rmg_signage/ready"
+  "$HOME/rmg_signage-ready"
+  "/tmp/rmg_signage-ready"
+)
+
+_kill_splash() {
+  if [ -f "$PIDFILE" ]; then
+    PID=$(cat "$PIDFILE")
+    kill "$PID" >/dev/null 2>&1 || true
+    rm -f "$PIDFILE"
+  fi
+  if [ -c /dev/tty1 ]; then
+    chvt 1 >/dev/null 2>&1 || true
+    printf "\033c" > /dev/tty1 || true
+  fi
+}
+
+_ready_exists() {
+  for f in "${READY_FILES[@]}"; do
+    [ -f "$f" ] && return 0
+  done
+  return 1
+}
 
 case "$1" in
   start)
     if [ -x "/usr/bin/fbi" ] && [ -f "$SPLASH_IMG" ]; then
-      # Switch to tty1 and display image
       chvt 1 >/dev/null 2>&1 || true
       nohup /usr/bin/fbi -T 1 -noverbose -a "$SPLASH_IMG" >/dev/null 2>&1 &
-      FBIPID=$!
-      echo $FBIPID > "$PIDFILE"
-      # Start a watcher that will remove the splash when rmg_signage signals readiness
+      echo $! > "$PIDFILE"
+      # Watcher en arrière-plan : attend le signal de readiness puis retire le splash
       (
-        while [ ! -f /run/rmg_signage/ready ]; do
+        TIMEOUT=120
+        ELAPSED=0
+        until _ready_exists || [ "$ELAPSED" -ge "$TIMEOUT" ]; do
           sleep 0.5
+          ELAPSED=$((ELAPSED + 1))
         done
-        # kill the fbi process and cleanup
-        if [ -f "$PIDFILE" ]; then
-          PID=$(cat "$PIDFILE")
-          kill "$PID" >/dev/null 2>&1 || true
-          rm -f "$PIDFILE"
-        fi
-        # clear tty1
-        if [ -c /dev/tty1 ]; then
-          chvt 1 >/dev/null 2>&1 || true
-          printf "\033c" > /dev/tty1 || true
-        fi
+        _kill_splash
       ) >/dev/null 2>&1 &
     fi
     ;;
   stop)
-    if [ -f "$PIDFILE" ]; then
-      PID=$(cat "$PIDFILE")
-      kill "$PID" >/dev/null 2>&1 || true
-      rm -f "$PIDFILE"
-      # clear tty1
-      if [ -c /dev/tty1 ]; then
-        chvt 1 >/dev/null 2>&1 || true
-        printf "\033c" > /dev/tty1 || true
-      fi
-    fi
+    _kill_splash
     ;;
   *)
     echo "Usage: $0 {start|stop}"

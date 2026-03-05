@@ -1,41 +1,163 @@
 #!/bin/bash
-# Simple installer pour Raspberry Pi OS Lite
-# Déploie uniquement le service systemd (mode headless)
-
 set -e
+# RMG Signage — Installateur unifié pour Raspberry Pi OS Lite
+# Usage: sudo bash install.sh [--user <username>] [--media-dir <path>]
+#
+# Ce script :
+#   1. Installe les paquets système nécessaires
+#   2. Crée/configure l'utilisateur et les dossiers
+#   3. Met en place le virtualenv Python
+#   4. Configure le boot silencieux (suppression splash RPi + messages kernel)
+#   5. Génère et déploie le service systemd avec les chemins réels
 
-PROJECT_DIR="/home/rmg/PhotoFrame"
+# ─── Auto-détection du répertoire projet (fonctionne quel que soit le nom du dossier cloné)
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ ! -d "/home/rmg" ]; then
-    echo "⚠️  Le dossier /home/rmg est introuvable. Vérifiez que l'utilisateur 'rmg' existe."
+# ─── Valeurs par défaut
+SERVICE_USER="${RMG_USER:-rmg}"
+SERVICE_NAME="rmg_signage.service"
+
+# ─── Lecture des arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --user)      SERVICE_USER="$2"; shift 2 ;;
+    --media-dir) MEDIA_DIR_ARG="$2"; shift 2 ;;
+    *) echo "Argument inconnu: $1"; exit 1 ;;
+  esac
+done
+
+MEDIA_DIR="${MEDIA_DIR_ARG:-/home/$SERVICE_USER/signage/medias}"
+VENV_DIR="$PROJECT_DIR/venv"
+LOG_FILE="/home/$SERVICE_USER/rmg_signage.log"
+
+# ─── Vérification des droits root
+if [ "$EUID" -ne 0 ]; then
+  echo "Ce script doit être lancé avec sudo : sudo bash install.sh"
+  exit 1
 fi
 
-echo "📦 Déploiement du service systemd (headless)"
+echo ""
+echo "======================================================"
+echo "  RMG Signage — Installation"
+echo "  Projet    : $PROJECT_DIR"
+echo "  User      : $SERVICE_USER"
+echo "  Médias    : $MEDIA_DIR"
+echo "======================================================"
+echo ""
 
-# Installer git si absent (requis pour les mises à jour depuis GitHub)
-if ! command -v git &>/dev/null; then
-    echo "📥 Installation de git..."
-    sudo apt-get update -qq
-    sudo apt-get install -y git
+# ─── 1. Paquets système
+echo "[1/6] Installation des paquets système..."
+apt-get update -qq
+apt-get install -y git mpv fbi python3-venv python3-pip
+
+# ─── 2. Utilisateur et groupes
+echo "[2/6] Configuration de l'utilisateur '$SERVICE_USER'..."
+if ! id "$SERVICE_USER" &>/dev/null; then
+  useradd -m -s /bin/bash "$SERVICE_USER"
+  echo "  → Utilisateur '$SERVICE_USER' créé"
 fi
-if [ ! -f "$PROJECT_DIR/rmg_signage.service" ]; then
-    echo "Erreur: $PROJECT_DIR/rmg_signage.service introuvable" >&2
-    exit 1
+usermod -aG video,input "$SERVICE_USER" 2>/dev/null || true
+
+# ─── 3. Dossiers et permissions
+echo "[3/6] Création des dossiers..."
+mkdir -p "$MEDIA_DIR"
+mkdir -p /run/rmg_signage
+chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" "$MEDIA_DIR"
+chown "$SERVICE_USER:$SERVICE_USER" /run/rmg_signage
+chmod +x "$PROJECT_DIR"/*.sh 2>/dev/null || true
+
+# ─── 4. Virtualenv Python
+echo "[4/6] Mise en place du virtualenv Python..."
+if [ ! -d "$VENV_DIR" ]; then
+  python3 -m venv "$VENV_DIR"
+fi
+"$VENV_DIR/bin/pip" install --upgrade pip -q
+if [ -f "$PROJECT_DIR/requirements.txt" ]; then
+  "$VENV_DIR/bin/pip" install -r "$PROJECT_DIR/requirements.txt" -q
+fi
+chown -R "$SERVICE_USER:$SERVICE_USER" "$VENV_DIR"
+
+# ─── 5. Boot silencieux
+echo "[5/6] Configuration du boot silencieux..."
+CONFIG_FILE=""
+CMDLINE_FILE=""
+for BOOT_DIR in /boot/firmware /boot; do
+  if [ -f "$BOOT_DIR/config.txt" ]; then
+    CONFIG_FILE="$BOOT_DIR/config.txt"
+    CMDLINE_FILE="$BOOT_DIR/cmdline.txt"
+    break
+  fi
+done
+
+if [ -n "$CONFIG_FILE" ]; then
+  if ! grep -q "disable_splash" "$CONFIG_FILE"; then
+    printf "\n# RMG Signage — boot silencieux\ndisable_splash=1\n" >> "$CONFIG_FILE"
+  fi
+  if [ -f "$CMDLINE_FILE" ] && ! grep -q "quiet" "$CMDLINE_FILE"; then
+    cp "$CMDLINE_FILE" "$CMDLINE_FILE.bak"
+    # Redirectionner les messages boot vers tty3 (écran vide pour l'utilisateur)
+    sed -i 's/console=tty1/console=tty3/g' "$CMDLINE_FILE"
+    # Masquer les messages kernel et le logo
+    sed -i 's/$/ quiet loglevel=0 logo.nologo rd.systemd.show_status=false/' "$CMDLINE_FILE"
+  fi
+  echo "  → Boot silencieux configuré ($CONFIG_FILE)"
+else
+  echo "  ⚠️  /boot/config.txt introuvable — boot silencieux non appliqué (normal hors Pi)"
 fi
 
-sudo cp "$PROJECT_DIR/rmg_signage.service" /etc/systemd/system/ || {
-    echo "Erreur: impossible de copier rmg_signage.service" >&2
-    exit 1
-}
-        # Créer le dossier média et appliquer la bonne propriété
-        sudo mkdir -p /home/rmg/signage/medias
-        sudo chown -R rmg:rmg /home/rmg/PhotoFrame /home/rmg/signage || true
+# ─── 6. Service systemd (généré dynamiquement avec les chemins réels)
+echo "[6/6] Déploiement du service systemd..."
+cat > "/etc/systemd/system/$SERVICE_NAME" << EOF
+[Unit]
+Description=RMG Signage - Flask & MPV
+After=network.target
+Wants=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
-sudo systemctl daemon-reload
-sudo systemctl enable rmg_signage.service
-sudo systemctl restart rmg_signage.service || true
+[Service]
+Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_USER
+WorkingDirectory=$PROJECT_DIR
+RuntimeDirectory=rmg_signage
+RuntimeDirectoryMode=0755
+Environment=RMG_SIGNAGE_DIR=$PROJECT_DIR
+Environment=RMG_SIGNAGE_MEDIA_DIR=$MEDIA_DIR
+Environment=RMG_SIGNAGE_LOG=$LOG_FILE
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
+ExecStartPre=/bin/bash $PROJECT_DIR/splash_helper.sh start
+ExecStart=/bin/bash $PROJECT_DIR/start_rmg_signage.sh
+ExecStopPost=/bin/bash $PROJECT_DIR/splash_helper.sh stop
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rmg_signage
+TimeoutStartSec=180
 
-echo "✅ Service systemd déployé. Suivez les logs: sudo journalctl -u rmg_signage -f"
-echo "⚙️  Vérifiez les chemins dans rmg_signage.service (User/WorkingDirectory/ExecStart)"
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"
+systemctl restart "$SERVICE_NAME" || true
+
+echo ""
+echo "======================================================"
+echo "  ✅ Installation terminée !"
+echo "======================================================"
+echo ""
+echo "  Projet    : $PROJECT_DIR"
+echo "  Médias    : $MEDIA_DIR"
+echo "  Logs app  : $LOG_FILE"
+echo "  Logs svc  : sudo journalctl -u rmg_signage -f"
+echo "  Interface : http://<ip-du-pi>:5000"
+echo ""
+echo "  Redémarrez le Pi pour appliquer le boot silencieux :"
+echo "  sudo reboot"
+echo ""
 
 exit 0
