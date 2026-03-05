@@ -40,19 +40,40 @@ cd "$SCRIPT_DIR"
 python3 "$SCRIPT_PATH" >> "$LOG_FILE" 2>&1 &
 PY_PID=$!
 
-# Signal de readiness pour splash_helper.sh (RuntimeDirectory=rmg_signage garantit /run/rmg_signage)
-sleep 1
-if kill -0 "$PY_PID" 2>/dev/null; then
+# Signal de readiness pour splash_helper.sh.
+# On attend que Flask soit réellement en écoute sur :5000 (pas juste un sleep fixe)
+# afin que le splash soit visible assez longtemps et que le device DRM soit libéré
+# AVANT que le mpv principal prenne la main.
+log "Attente de Flask sur :5000 (max 30s)..."
+FLASK_READY=0
+for _i in $(seq 1 30); do
+  if ! kill -0 "$PY_PID" 2>/dev/null; then
+    log "⚠️  Le processus Python s'est arrêté prématurément (PID $PY_PID)"
+    break
+  fi
+  if python3 -c \
+    "import socket,sys; s=socket.socket(); s.settimeout(1); r=s.connect_ex(('127.0.0.1',5000)); s.close(); sys.exit(0 if r==0 else 1)" \
+    2>/dev/null; then
+    FLASK_READY=1
+    log "Flask prêt après ${_i}s"
+    break
+  fi
+  sleep 1
+done
+
+if [ "$FLASK_READY" -eq 1 ]; then
   READY_FILE="/run/rmg_signage/ready"
   if touch "$READY_FILE" 2>/dev/null; then
     log "Readiness signalée : $READY_FILE"
   else
-    # Fallbacks si /run/rmg_signage n'est pas disponible
     touch "$HOME/rmg_signage-ready" 2>/dev/null || touch "/tmp/rmg_signage-ready" 2>/dev/null || true
     log "Readiness signalée (fallback)"
   fi
+elif ! kill -0 "$PY_PID" 2>/dev/null; then
+  log "⚠️  Python mort avant que Flask soit prêt"
 else
-  log "⚠️  Le processus Python ne semble pas avoir démarré (PID $PY_PID)"
+  log "⚠️  Flask non disponible après 30s — readiness signalée quand même"
+  touch "/run/rmg_signage/ready" 2>/dev/null || touch "/tmp/rmg_signage-ready" 2>/dev/null || true
 fi
 
 wait $PY_PID

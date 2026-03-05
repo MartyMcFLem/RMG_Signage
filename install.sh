@@ -49,7 +49,9 @@ echo ""
 # ─── 1. Paquets système
 echo "[1/6] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git mpv fbi python3-venv python3-pip fonts-dejavu-core
+apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core
+  # Note : fbi retiré — le splash utilise désormais mpv (--vo=drm) pour éviter
+  # le conflit DRM/KMS avec le processus mpv principal (vc4-kms-v3d sur Pi OS Bookworm)
 
 # ─── 2. Utilisateur et groupes
 echo "[2/6] Configuration de l'utilisateur '$SERVICE_USER'..."
