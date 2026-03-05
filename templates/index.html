@@ -397,6 +397,7 @@
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
       border-top: 1px solid rgba(255,255,255,.07);
+      border-radius: 0 0 9px 9px;
       display: flex; align-items: center; gap: 5px;
       flex-shrink: 0;
     }
@@ -733,8 +734,8 @@
                 <button class="ia-btn ia-del"  onclick="_gDelete(${i})" title="Supprimer">&#10005;</button>
               </div>
               <div class="item-foot">
-                <span class="item-name">${file}</span>
                 <span class="type-badge ${video ? 'badge-video' : gif ? 'badge-gif' : 'badge-img'}">${video ? 'VIDEO' : gif ? 'GIF' : 'IMG'}</span>
+                <span class="item-name">${file}</span>
                 ${!video
                   ? `<div class="dur-pill" onclick="event.stopPropagation()">
                        <input type="number"
