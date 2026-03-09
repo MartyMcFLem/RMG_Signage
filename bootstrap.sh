@@ -24,6 +24,7 @@ fi
 # Cloner ou mettre à jour le repo
 if [ -d "$INSTALL_DIR/.git" ]; then
   echo "Mise à jour du repo dans $INSTALL_DIR..."
+  git config --global --add safe.directory "$INSTALL_DIR"
   git -C "$INSTALL_DIR" pull --ff-only origin main
 else
   echo "Clonage dans $INSTALL_DIR..."
