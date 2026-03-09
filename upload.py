@@ -567,8 +567,9 @@ def control_mpv(action):
     elif action == "show-ip":
         welcome = generate_welcome_screen()
         if welcome and os.path.exists(welcome):
-            send_mpv_command(["loadfile", welcome, "replace"])
-            send_mpv_command(["set_property", "loop-file", "inf"])
+            mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
+            cmd = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", "--loop-file=inf", welcome]
+            restart_mpv(override_cmd=cmd)
             return jsonify({"success": True, "message": "Écran de connexion affiché"})
         return jsonify({"success": False, "message": "Impossible de générer l'écran"}), 500
     return jsonify({"success": False, "message": "Action inconnue"}), 400
@@ -719,12 +720,11 @@ def start_flask():
     app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False)
 
 
-def start_mpv():
-    """Lance MPV avec la config actuelle"""
+def start_mpv(override_cmd=None):
+    """Lance MPV avec la config actuelle (ou une commande spécifique si override_cmd)"""
     global mpv_process
     # Délai de 4s : laisse le splash (mpv DRM) être tué par le watcher de
     # splash_helper.sh et libérer le device DRM avant que ce mpv ne démarre.
-    # Timeline typique : Flask prêt ~1s → splash tué ~1.5s → mpv principal à 4s.
     time.sleep(4)
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:
@@ -732,7 +732,7 @@ def start_mpv():
     except Exception:
         pass
 
-    cmd = get_mpv_cmd()
+    cmd = override_cmd or get_mpv_cmd()
     if cmd is None:
         print("⚠️ Aucun fichier média trouvé dans", MEDIA_DIR)
         print("   En attente de fichiers...")
@@ -812,7 +812,7 @@ def start_mpv():
     mpv_process = None
 
 
-def restart_mpv():
+def restart_mpv(override_cmd=None):
     """Redémarre MPV (protégé par verrou pour éviter les lancements multiples)"""
     global mpv_process
     if not _mpv_lock.acquire(blocking=False):
@@ -838,7 +838,7 @@ def restart_mpv():
         mpv_process = None
     finally:
         _mpv_lock.release()
-    threading.Thread(target=start_mpv, daemon=True).start()
+    threading.Thread(target=start_mpv, args=(override_cmd,), daemon=True).start()
 
 
 if __name__ == "__main__":
