@@ -564,6 +564,13 @@ def control_mpv(action):
         if send_mpv_command(["playlist-next"]):
             return jsonify({"success": True, "message": "Fichier suivant"})
         return jsonify({"success": False, "message": "Commande échouée"}), 500
+    elif action == "show-ip":
+        welcome = generate_welcome_screen()
+        if welcome and os.path.exists(welcome):
+            send_mpv_command(["loadfile", welcome, "replace"])
+            send_mpv_command(["set_property", "loop-file", "inf"])
+            return jsonify({"success": True, "message": "Écran de connexion affiché"})
+        return jsonify({"success": False, "message": "Impossible de générer l'écran"}), 500
     return jsonify({"success": False, "message": "Action inconnue"}), 400
 
 
