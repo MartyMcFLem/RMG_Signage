@@ -59,7 +59,7 @@ if ! id "$SERVICE_USER" &>/dev/null; then
   useradd -m -s /bin/bash "$SERVICE_USER"
   echo "  → Utilisateur '$SERVICE_USER' créé"
 fi
-usermod -aG video,input,tty "$SERVICE_USER" 2>/dev/null || true
+usermod -aG video,render,input,tty "$SERVICE_USER" 2>/dev/null || true
 
 # ─── 3. Dossiers et permissions
 echo "[3/6] Création des dossiers..."
