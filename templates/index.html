@@ -272,6 +272,7 @@
     .ctrl-next    { background: var(--blue);  color: #fff; grid-column: span 2; }
     .ctrl-stop    { background: var(--red);   color: #fff; }
     .ctrl-all     { background: var(--green); color: #fff; grid-column: span 2; }
+    .ctrl-ip      { background: var(--purple); color: #fff; }
 
     /* ── Settings ────────────────────────────────────── */
     .setting-row {
@@ -563,6 +564,7 @@
             <button class="ctrl-btn ctrl-restart" onclick="control('restart')">↻ Redémarrer</button>
             <button class="ctrl-btn ctrl-stop"    onclick="control('stop')">⏹ Arrêter</button>
             <button class="ctrl-btn ctrl-next"    onclick="control('next')">⏭ Fichier suivant</button>
+            <button class="ctrl-btn ctrl-ip"      onclick="control('show-ip')">📡 Afficher IP</button>
             <button class="ctrl-btn ctrl-all" id="playAllBtn" style="display:none"
                     onclick="playAll()">▶ Tous les médias</button>
           </div>
