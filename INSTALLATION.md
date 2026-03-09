@@ -15,7 +15,7 @@ Ce document décrit l'installation sur Raspberry Pi OS Lite (headless, sans inte
 
 ### Option A — Bootstrap (tout-en-un, recommandé)
 
-Une seule commande : clone le projet dans `/opt/rmg_signage` et installe tout automatiquement.
+Une seule commande : télécharge et exécute l'installateur directement.
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash
@@ -33,7 +33,7 @@ sudo bash install.sh
 ```
 
 C'est tout. Le script `install.sh` fait tout automatiquement :
-- Installe les paquets système (`mpv`, `fbi`, `python3-venv`, `git`)
+- Installe les paquets système (`mpv`, `python3-venv`, `git`)
 - Crée les dossiers nécessaires
 - Met en place le virtualenv Python et installe les dépendances
 - **Configure le boot silencieux** (supprime le splash RPi et les messages kernel)
