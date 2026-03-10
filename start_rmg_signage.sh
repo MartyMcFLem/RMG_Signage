@@ -63,10 +63,18 @@ done
 
 if [ "$FLASK_READY" -eq 1 ]; then
   # Quitter Plymouth pour libérer le DRM — MPV prendra ensuite la main.
-  # --retain-splash : Plymouth garde une copie statique visible le temps que MPV démarre.
+  # On noircit tty1 AVANT de quitter Plymouth pour éviter le flash du terminal
+  # pendant le gap entre Plymouth et MPV.
+  if [ -c /dev/tty1 ]; then
+    printf "\033[?25l\033[40m\033[2J\033[H" > /dev/tty1 2>/dev/null || true
+  fi
   if command -v plymouth &>/dev/null && plymouth --ping 2>/dev/null; then
     plymouth quit --retain-splash 2>/dev/null || true
     log "Plymouth libéré (DRM disponible pour MPV)"
+  fi
+  # Maintenir le blackout tty1 après la libération DRM
+  if [ -c /dev/tty1 ]; then
+    printf "\033[?25l\033[40m\033[2J\033[H" > /dev/tty1 2>/dev/null || true
   fi
   READY_FILE="/run/rmg_signage/ready"
   if touch "$READY_FILE" 2>/dev/null; then

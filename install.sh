@@ -272,6 +272,8 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
+# Masquer getty@tty1 pour éviter l'affichage d'un terminal entre Plymouth et MPV
+systemctl mask getty@tty1 2>/dev/null || true
 systemctl enable "${SERVICE_NAME}.service"
 systemctl restart "${SERVICE_NAME}.service" || true
 

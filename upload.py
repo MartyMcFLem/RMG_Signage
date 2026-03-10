@@ -850,12 +850,26 @@ def start_mpv(override_cmd=None, boot_delay=True):
             threading.Thread(target=_pregen, daemon=True).start()
         else:
             _welcome_ready.set()
-        # Délai court : laisse le temps à Plymouth de libérer le DRM
-        # (plymouth quit --retain-splash appelé par start_rmg_signage.sh).
-        time.sleep(1)
+        # Attendre que start_rmg_signage.sh ait quitté Plymouth et créé le ready file.
+        # Le ready file est écrit APRÈS plymouth quit, donc MPV ne démarre
+        # qu'une fois le DRM réellement libéré.
+        _ready_files = [
+            "/run/rmg_signage/ready",
+            os.path.expanduser("~/rmg_signage-ready"),
+            "/tmp/rmg_signage-ready",
+        ]
+        for _t in range(35):
+            if any(os.path.exists(p) for p in _ready_files):
+                break
+            time.sleep(1)
+        else:
+            # Timeout : Plymouth probablement absent, on continue quand même
+            pass
+        # Petit délai supplémentaire pour que Plymouth libère effectivement le DRM
+        time.sleep(0.5)
         _welcome_ready.wait(timeout=30)  # attend max 30s que le welcome soit prêt
     elif boot_delay:
-        time.sleep(1)
+        time.sleep(0.5)
 
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:
