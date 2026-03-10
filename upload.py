@@ -21,6 +21,10 @@ MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
 MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", os.path.join(HOME_DIR, ".config", "mpv"))
 LOG_FILE = os.path.join(MEDIA_DIR, "rmg_signage-mpv.log")
 
+# Branche git et port Flask — injectés par systemd selon l'environnement (prod/dev)
+GIT_BRANCH = os.environ.get("RMG_SIGNAGE_BRANCH", "main")
+FLASK_PORT  = int(os.environ.get("RMG_SIGNAGE_PORT", 5000))
+
 # Configuration par défaut
 config = {
     "image_duration": 8,
@@ -710,14 +714,14 @@ def update_git_status():
             [GIT_BINARY, "log", "-1", "--pretty=%s"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
-        # Hash du dernier commit sur origin/main (fetch silencieux)
+        # Hash du dernier commit sur origin/<branche> (fetch silencieux)
         try:
             subprocess.check_output(
-                [GIT_BINARY, "fetch", "origin", "main"],
+                [GIT_BINARY, "fetch", "origin", GIT_BRANCH],
                 cwd=script_dir, stderr=subprocess.STDOUT
             )
             remote_commit = subprocess.check_output(
-                [GIT_BINARY, "rev-parse", "--short", "origin/main"],
+                [GIT_BINARY, "rev-parse", "--short", f"origin/{GIT_BRANCH}"],
                 cwd=script_dir, stderr=subprocess.STDOUT
             ).decode().strip()
         except Exception:
@@ -726,6 +730,7 @@ def update_git_status():
             "success": True,
             "commit": commit,
             "branch": branch,
+            "tracked_branch": GIT_BRANCH,
             "last_message": msg,
             "remote_commit": remote_commit,
             "up_to_date": commit == remote_commit if remote_commit else None
@@ -746,27 +751,27 @@ def update_from_github():
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
 
-        # 1. Récupérer origin/main
+        # 1. Récupérer origin/<branche>
         fetch_out = subprocess.check_output(
-            [GIT_BINARY, "fetch", "origin", "main"],
+            [GIT_BINARY, "fetch", "origin", GIT_BRANCH],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
 
-        # 2. Basculer sur main si ce n'est pas déjà la branche active
+        # 2. Basculer sur la branche cible si nécessaire
         current_branch = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
         checkout_out = ""
-        if current_branch != "main":
+        if current_branch != GIT_BRANCH:
             checkout_out = subprocess.check_output(
-                [GIT_BINARY, "checkout", "main"],
+                [GIT_BINARY, "checkout", GIT_BRANCH],
                 cwd=script_dir, stderr=subprocess.STDOUT
             ).decode().strip()
 
-        # 3. Aligner strictement sur origin/main (ignore toute modif locale)
+        # 3. Aligner strictement sur origin/<branche> (ignore toute modif locale)
         reset_out = subprocess.check_output(
-            [GIT_BINARY, "reset", "--hard", "origin/main"],
+            [GIT_BINARY, "reset", "--hard", f"origin/{GIT_BRANCH}"],
             cwd=script_dir, stderr=subprocess.STDOUT
         ).decode().strip()
 
@@ -788,7 +793,7 @@ def update_from_github():
         return jsonify({
             "success": True,
             "updated": updated,
-            "branch": "main",
+            "branch": GIT_BRANCH,
             "before": before,
             "after": after,
             "output": pull_out,
@@ -803,7 +808,7 @@ def update_from_github():
 def start_flask():
     # use_reloader=False évite le double fork qui casserait le thread MPV
     # threaded=True permet les requêtes concurrentes
-    app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=FLASK_PORT, threaded=True, use_reloader=False)
 
 
 def start_mpv(override_cmd=None):

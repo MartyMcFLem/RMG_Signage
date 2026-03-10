@@ -2,6 +2,8 @@
 set -e
 # RMG Signage — Installateur unifié pour Raspberry Pi OS Lite
 # Usage: sudo bash install.sh [--user <username>] [--media-dir <path>]
+#                             [--branch <branch>] [--port <port>]
+#                             [--service-name <name>]
 #
 # Ce script doit être lancé depuis un clone du repo :
 #   git clone https://github.com/MartyMcFLem/RMG_Signage.git
@@ -9,6 +11,8 @@ set -e
 #
 # Pour une installation en une ligne (sans clone préalable), utilisez bootstrap.sh :
 #   curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash
+# Version DEV :
+#   curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/DEV/bootstrap-dev.sh | sudo bash
 
 # ─── Répertoire projet : priorité à la variable d'environnement (passée par bootstrap.sh),
 #     sinon résolu depuis l'emplacement réel du script courant.
@@ -16,20 +20,25 @@ PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
 # ─── Valeurs par défaut
 SERVICE_USER="${RMG_USER:-rmg}"
-SERVICE_NAME="rmg_signage.service"
+SERVICE_NAME="rmg_signage"
+BRANCH="main"
+PORT=5000
 
 # ─── Lecture des arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --user)      SERVICE_USER="$2"; shift 2 ;;
-    --media-dir) MEDIA_DIR_ARG="$2"; shift 2 ;;
+    --user)         SERVICE_USER="$2"; shift 2 ;;
+    --media-dir)    MEDIA_DIR_ARG="$2"; shift 2 ;;
+    --branch)       BRANCH="$2"; shift 2 ;;
+    --port)         PORT="$2"; shift 2 ;;
+    --service-name) SERVICE_NAME="$2"; shift 2 ;;
     *) echo "Argument inconnu: $1"; exit 1 ;;
   esac
 done
 
 MEDIA_DIR="${MEDIA_DIR_ARG:-/home/$SERVICE_USER/signage/medias}"
 VENV_DIR="$PROJECT_DIR/venv"
-LOG_FILE="/home/$SERVICE_USER/rmg_signage.log"
+LOG_FILE="/home/$SERVICE_USER/${SERVICE_NAME}.log"
 
 # ─── Vérification des droits root
 if [ "$EUID" -ne 0 ]; then
@@ -43,6 +52,9 @@ echo "  RMG Signage — Installation"
 echo "  Projet    : $PROJECT_DIR"
 echo "  User      : $SERVICE_USER"
 echo "  Médias    : $MEDIA_DIR"
+echo "  Branche   : $BRANCH"
+echo "  Port      : $PORT"
+echo "  Service   : $SERVICE_NAME"
 echo "======================================================"
 echo ""
 
@@ -157,9 +169,9 @@ fi
 
 # ─── 6. Service systemd (généré dynamiquement avec les chemins réels)
 echo "[6/6] Déploiement du service systemd..."
-cat > "/etc/systemd/system/$SERVICE_NAME" << EOF
+cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
-Description=RMG Signage - Flask & MPV
+Description=RMG Signage - Flask & MPV (${BRANCH})
 After=network.target
 Wants=network.target
 StartLimitIntervalSec=60
@@ -170,11 +182,13 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$PROJECT_DIR
-RuntimeDirectory=rmg_signage
+RuntimeDirectory=$SERVICE_NAME
 RuntimeDirectoryMode=0755
 Environment=RMG_SIGNAGE_DIR=$PROJECT_DIR
 Environment=RMG_SIGNAGE_MEDIA_DIR=$MEDIA_DIR
 Environment=RMG_SIGNAGE_LOG=$LOG_FILE
+Environment=RMG_SIGNAGE_BRANCH=$BRANCH
+Environment=RMG_SIGNAGE_PORT=$PORT
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
 ExecStartPre=+/bin/bash $PROJECT_DIR/splash_helper.sh start
@@ -184,7 +198,7 @@ Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=rmg_signage
+SyslogIdentifier=$SERVICE_NAME
 TimeoutStartSec=180
 
 [Install]
@@ -192,8 +206,8 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable "$SERVICE_NAME"
-systemctl restart "$SERVICE_NAME" || true
+systemctl enable "${SERVICE_NAME}.service"
+systemctl restart "${SERVICE_NAME}.service" || true
 
 echo ""
 echo "======================================================"
@@ -203,7 +217,7 @@ echo ""
 echo "  Projet    : $PROJECT_DIR"
 echo "  Médias    : $MEDIA_DIR"
 echo "  Logs app  : $LOG_FILE"
-echo "  Logs svc  : sudo journalctl -u rmg_signage -f"
+echo "  Logs svc  : sudo journalctl -u $SERVICE_NAME -f"
 echo "  Série     : $NEW_HOSTNAME"
 echo "  Interface : http://$NEW_HOSTNAME.local:5000  (ou via IP)"
 echo ""
