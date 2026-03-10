@@ -427,6 +427,12 @@ def get_mpv_cmd():
         if welcome and os.path.exists(welcome):
             cmd_welcome = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", welcome]
             return cmd_welcome
+        # Fallback : utiliser splash.png si le welcome screen n'a pas pu être généré
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        splash_path = os.path.join(script_dir, 'static', 'splash.png')
+        if os.path.exists(splash_path):
+            print("⚠️  Fallback welcome screen → splash.png")
+            return [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", splash_path]
         return None
 
     # Appliquer l'ordre personnalisé si shuffle désactivé
@@ -875,6 +881,18 @@ def start_mpv(override_cmd=None):
                         logf.close()
                     except Exception:
                         pass
+                # Si mpv_process a été remplacé par restart_mpv(), ne pas relancer ici
+                if mpv_process is not proc:
+                    return
+                # Sortie inattendue de MPV (pas un arrêt volontaire) → relancer
+                mpv_process = None
+                try:
+                    with open(LOG_FILE, "ab") as logf:
+                        logf.write(b"mpv exited unexpectedly, restarting in 2s...\n")
+                except Exception:
+                    pass
+                time.sleep(2)
+                threading.Thread(target=start_mpv, daemon=True).start()
                 return
             else:
                 try:
