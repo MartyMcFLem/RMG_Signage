@@ -657,7 +657,7 @@
           </div>
           <div class="ctrl-grid">
             <button class="ctrl-btn ctrl-update" id="updateBtn" onclick="runUpdate()">
-              ↑ Mettre à jour
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Mettre à jour
             </button>
           </div>
         </div>
@@ -1049,8 +1049,8 @@
         const data = await fetch('/api/update', { method: 'POST' }).then(r => r.json());
         if (data.success) {
           if (data.updated) {
-            btn.textContent = '✓ Redémarrage en cours…';
-            setTimeout(() => location.reload(), 4000);
+            btn.textContent = '✓ Redémarrage de l\'appareil…';
+            setTimeout(() => location.reload(), 20000);
             return;
           } else {
             showToast('Déjà à jour');
@@ -1063,7 +1063,7 @@
         showToast('Erreur réseau');
       }
       btn.disabled = false;
-      btn.textContent = '↑ Mettre à jour depuis GitHub';
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Mettre à jour';
     }
 
     // ── Init ──────────────────────────────────────────────

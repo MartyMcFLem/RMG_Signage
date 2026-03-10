@@ -422,8 +422,14 @@ def get_mpv_cmd():
         all_files = []
 
     if not all_files:
-        # Pas de médias : afficher l'écran de bienvenue avec l'adresse IP
-        welcome = generate_welcome_screen()
+        # Pas de médias : afficher l'écran de bienvenue avec l'adresse IP.
+        # Si le fichier a déjà été généré (pré-génération parallèle dans start_mpv),
+        # on le réutilise directement pour éviter une double génération coûteuse.
+        welcome_path = os.path.join(MEDIA_DIR, ".welcome_screen.png")
+        if os.path.exists(welcome_path) and (time.time() - os.path.getmtime(welcome_path)) < 300:
+            welcome = welcome_path
+        else:
+            welcome = generate_welcome_screen()
         if welcome and os.path.exists(welcome):
             cmd_welcome = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", welcome]
             return cmd_welcome
@@ -793,7 +799,7 @@ def update_from_github():
         if updated:
             def delayed_restart():
                 time.sleep(1.5)
-                subprocess.Popen(["sudo", "systemctl", "restart", "rmg_signage"])
+                subprocess.Popen(["sudo", "reboot"])
             threading.Thread(target=delayed_restart, daemon=True).start()
 
         return jsonify({
@@ -820,9 +826,35 @@ def start_flask():
 def start_mpv(override_cmd=None):
     """Lance MPV avec la config actuelle (ou une commande spécifique si override_cmd)"""
     global mpv_process
+
+    # Pré-générer l'écran de bienvenue EN PARALLÈLE du délai DRM (si aucun média présent).
+    # get_local_ip() peut prendre plusieurs secondes → on ne veut pas cumuler ce délai
+    # avec le time.sleep(4) qui suit.
+    _welcome_ready = threading.Event()
+    if not override_cmd:
+        os.makedirs(MEDIA_DIR, exist_ok=True)
+        try:
+            _has_media = any(
+                is_media_file(f)
+                for f in os.listdir(MEDIA_DIR)
+                if os.path.isfile(os.path.join(MEDIA_DIR, f))
+            )
+        except Exception:
+            _has_media = False
+        if not _has_media:
+            def _pregen():
+                generate_welcome_screen()
+                _welcome_ready.set()
+            threading.Thread(target=_pregen, daemon=True).start()
+        else:
+            _welcome_ready.set()
+    else:
+        _welcome_ready.set()
+
     # Délai de 4s : laisse le splash (mpv DRM) être tué par le watcher de
     # splash_helper.sh et libérer le device DRM avant que ce mpv ne démarre.
     time.sleep(4)
+    _welcome_ready.wait(timeout=30)  # attend max 30s que le welcome soit prêt
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
