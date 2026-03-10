@@ -197,28 +197,35 @@ cat > "$PLYMOUTH_THEME_DIR/rmg-signage.script" << 'PLYM_EOF'
 screen_width  = Window.GetWidth();
 screen_height = Window.GetHeight();
 
-// Fond noir
+// Fallback si les dimensions sont nulles (peut arriver tôt au boot)
+if (screen_width  < 1) { screen_width  = 1920; }
+if (screen_height < 1) { screen_height = 1080; }
+
+// Fond noir plein écran
 bg = Sprite(Image.Fill(screen_width, screen_height, 0, 0, 0, 1.0));
 bg.SetZ(-100);
 
-// Logo centré, redimensionné si nécessaire
+// Logo : scale to fit (conserver le ratio, occuper max 90 % de l'écran)
 logo_image = Image("splash.png");
 lw = logo_image.GetWidth();
 lh = logo_image.GetHeight();
 
-max_w = Math.Floor(screen_width  * 0.7);
-max_h = Math.Floor(screen_height * 0.7);
-if (lw > max_w || lh > max_h) {
-    if ((lw * max_h) > (lh * max_w)) {
-        new_h = Math.Floor(lh * max_w / lw);
-        new_w = max_w;
-    } else {
-        new_w = Math.Floor(lw * max_h / lh);
-        new_h = max_h;
+max_w = Math.Floor(screen_width  * 0.9);
+max_h = Math.Floor(screen_height * 0.9);
+
+if (lw > 0 && lh > 0) {
+    if (lw > max_w || lh > max_h) {
+        if ((lw * max_h) > (lh * max_w)) {
+            new_w = max_w;
+            new_h = Math.Floor(lh * max_w / lw);
+        } else {
+            new_h = max_h;
+            new_w = Math.Floor(lw * max_h / lh);
+        }
+        logo_image = logo_image.Scale(new_w, new_h);
+        lw = new_w;
+        lh = new_h;
     }
-    logo_image = logo_image.Scale(new_w, new_h);
-    lw = new_w;
-    lh = new_h;
 }
 
 logo = Sprite(logo_image);

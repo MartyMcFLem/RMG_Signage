@@ -76,6 +76,10 @@ if [ "$FLASK_READY" -eq 1 ]; then
   if [ -c /dev/tty1 ]; then
     printf "\033[?25l\033[40m\033[2J\033[H" > /dev/tty1 2>/dev/null || true
   fi
+  # Noircir le framebuffer directement (couvre le gap DRM entre Plymouth et MPV)
+  if [ -c /dev/fb0 ]; then
+    dd if=/dev/zero of=/dev/fb0 bs=1M 2>/dev/null || true
+  fi
   READY_FILE="/run/rmg_signage/ready"
   if touch "$READY_FILE" 2>/dev/null; then
     log "Readiness signalée : $READY_FILE"
