@@ -823,16 +823,18 @@ def start_flask():
     app.run(host="0.0.0.0", port=FLASK_PORT, threaded=True, use_reloader=False)
 
 
-def start_mpv(override_cmd=None):
-    """Lance MPV avec la config actuelle (ou une commande spécifique si override_cmd)"""
+def start_mpv(override_cmd=None, boot_delay=True):
+    """Lance MPV avec la config actuelle (ou une commande spécifique si override_cmd).
+    boot_delay=True uniquement au premier démarrage (attend la libération DRM du splash).
+    boot_delay=False pour les redémarrages runtime (restart_mpv, show-ip, etc.)."""
     global mpv_process
 
-    # Pré-générer l'écran de bienvenue EN PARALLÈLE du délai DRM (si aucun média présent).
-    # get_local_ip() peut prendre plusieurs secondes → on ne veut pas cumuler ce délai
-    # avec le time.sleep(4) qui suit.
-    _welcome_ready = threading.Event()
-    if not override_cmd:
+    if boot_delay and not override_cmd:
+        # Pré-générer l'écran de bienvenue EN PARALLÈLE du délai DRM (si aucun média).
+        # get_local_ip() peut prendre plusieurs secondes → on ne veut pas cumuler ce
+        # délai avec le time.sleep(4) qui suit.
         os.makedirs(MEDIA_DIR, exist_ok=True)
+        _welcome_ready = threading.Event()
         try:
             _has_media = any(
                 is_media_file(f)
@@ -848,13 +850,14 @@ def start_mpv(override_cmd=None):
             threading.Thread(target=_pregen, daemon=True).start()
         else:
             _welcome_ready.set()
-    else:
-        _welcome_ready.set()
+        # Délai de 4s : laisse le splash (mpv DRM) être tué par le watcher de
+        # splash_helper.sh et libérer le device DRM avant que ce mpv ne démarre.
+        time.sleep(4)
+        _welcome_ready.wait(timeout=30)  # attend max 30s que le welcome soit prêt
+    elif boot_delay:
+        # override_cmd fourni au boot (rare) — on attend quand même la libération DRM
+        time.sleep(4)
 
-    # Délai de 4s : laisse le splash (mpv DRM) être tué par le watcher de
-    # splash_helper.sh et libérer le device DRM avant que ce mpv ne démarre.
-    time.sleep(4)
-    _welcome_ready.wait(timeout=30)  # attend max 30s que le welcome soit prêt
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
@@ -924,7 +927,7 @@ def start_mpv(override_cmd=None):
                 except Exception:
                     pass
                 time.sleep(2)
-                threading.Thread(target=start_mpv, daemon=True).start()
+                threading.Thread(target=start_mpv, kwargs={'boot_delay': False}, daemon=True).start()
                 return
             else:
                 try:
@@ -979,7 +982,7 @@ def restart_mpv(override_cmd=None):
         mpv_process = None
     finally:
         _mpv_lock.release()
-    threading.Thread(target=start_mpv, args=(override_cmd,), daemon=True).start()
+    threading.Thread(target=start_mpv, args=(override_cmd,), kwargs={'boot_delay': False}, daemon=True).start()
 
 
 if __name__ == "__main__":
