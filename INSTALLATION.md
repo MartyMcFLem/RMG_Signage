@@ -73,11 +73,11 @@ sudo bash install.sh --user pi --media-dir /mnt/usb/medias
 À l'installation, un numéro de série unique est automatiquement généré et appliqué comme hostname du Pi :
 
 ```
-rmg-sign-XXXXXXXXX
+rmg-sign-XXXXXXXXXXXXXXXX
 ```
 
-- Basé sur le CPU serial du Raspberry Pi (priorité)
-- Sinon : UUID aléatoire persisté dans `/etc/rmg_serial`
+- Basé sur le CPU serial complet du Raspberry Pi — 16 caractères hex (priorité)
+- Sinon : UUID aléatoire 16 chars persisté dans `/etc/rmg_serial`
 - Le Pi est accessible sur le réseau via `rmg-sign-XXXXXXXXX.local`
 - Le serial est exposé dans l'API : `GET /api/status` → champ `serial`
 
