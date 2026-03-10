@@ -1,12 +1,14 @@
 from flask import Flask, request, redirect, jsonify, send_from_directory, render_template
 from werkzeug.utils import secure_filename
 import os
+import re
 import threading
 import subprocess
 import time
 import json
 import shutil
 import shlex
+import uuid as _uuid
 
 # === CONFIG ===
 HOME_DIR = os.path.expanduser("~")
@@ -52,6 +54,84 @@ ALLOWED_UPLOAD_EXTENSIONS = {
     '.heic', '.heif',
     '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'
 }
+
+
+_SERIAL_PATTERN = re.compile(r'^rmg-sign-[a-z0-9]{9}$')
+
+# Serial mis en cache au démarrage
+_device_serial = None
+
+
+def _generate_serial_suffix():
+    """Génère 9 caractères alphanumériques pour le serial (CPU serial Pi ou UUID)."""
+    # Méthode 1 : CPU serial du Raspberry Pi
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            for line in f:
+                if line.startswith('Serial'):
+                    suffix = re.sub(r'[^0-9a-f]', '', line.split(':')[-1].strip())
+                    if len(suffix) >= 9:
+                        return suffix[-9:]
+    except Exception:
+        pass
+    # Méthode 2 : UUID aléatoire persisté
+    serial_file = '/etc/rmg_serial'
+    try:
+        if os.path.exists(serial_file):
+            stored = open(serial_file).read().strip()
+            if len(stored) == 9:
+                return stored
+    except Exception:
+        pass
+    suffix = _uuid.uuid4().hex[:9]
+    try:
+        with open(serial_file, 'w') as f:
+            f.write(suffix)
+    except Exception:
+        pass
+    return suffix
+
+
+def get_device_serial():
+    """Retourne le numéro de série du device (rmg-sign-XXXXXXXXX).
+    Priorité : hostname OS → config.json → génération depuis CPU serial ou UUID.
+    En fallback, tente de corriger le hostname via sudo hostnamectl."""
+    global _device_serial, config
+    if _device_serial:
+        return _device_serial
+
+    import socket as _socket
+    hostname = _socket.gethostname()
+    if _SERIAL_PATTERN.match(hostname):
+        _device_serial = hostname
+        return _device_serial
+
+    # Fallback : serial stocké dans config
+    stored = config.get('device_serial', '')
+    if stored and _SERIAL_PATTERN.match(stored):
+        _device_serial = stored
+        return _device_serial
+
+    # Génération
+    serial = f"rmg-sign-{_generate_serial_suffix()}"
+    config['device_serial'] = serial
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception:
+        pass
+
+    # Tenter de corriger le hostname (nécessite sudoers rmg_hostname)
+    try:
+        subprocess.run(
+            ['sudo', 'hostnamectl', 'set-hostname', serial],
+            capture_output=True, timeout=5
+        )
+    except Exception:
+        pass
+
+    _device_serial = serial
+    return _device_serial
 
 
 def send_mpv_command(command):
@@ -439,6 +519,7 @@ def get_status():
         "mpv_running": running,
         "media_count": media_count,
         "media_dir": MEDIA_DIR,
+        "serial": get_device_serial(),
     })
 
 
@@ -848,6 +929,8 @@ def restart_mpv(override_cmd=None):
 
 if __name__ == "__main__":
     os.makedirs(MEDIA_DIR, exist_ok=True)
+    # Initialisation du serial dès le démarrage (corrige le hostname si nécessaire)
+    print(f"🔑 Numéro de série : {get_device_serial()}")
 
     if not os.path.exists(CONFIG_FILE):
         try:

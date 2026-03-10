@@ -61,6 +61,53 @@ if ! id "$SERVICE_USER" &>/dev/null; then
 fi
 usermod -aG video,render,input,tty "$SERVICE_USER" 2>/dev/null || true
 
+# ─── 2b. Génération du numéro de série et configuration du hostname
+echo "[2b/6] Génération du numéro de série..."
+
+_generate_serial_suffix() {
+  # Méthode 1 : CPU serial du Raspberry Pi (dernier 9 chars hex)
+  local serial
+  serial=$(grep -m1 "^Serial" /proc/cpuinfo 2>/dev/null | awk '{print $NF}' | tr -cd '0-9a-f')
+  if [ ${#serial} -ge 9 ]; then
+    echo "${serial: -9}"
+    return
+  fi
+  # Méthode 2 : UUID aléatoire (persisté dans /etc/rmg_serial)
+  local serial_file="/etc/rmg_serial"
+  if [ -f "$serial_file" ]; then
+    cat "$serial_file"
+    return
+  fi
+  serial=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-' | cut -c1-9)
+  if [ -z "$serial" ]; then
+    serial=$(date +%s%N | sha256sum | cut -c1-9)
+  fi
+  echo "$serial" > "$serial_file"
+  echo "$serial"
+}
+
+DEVICE_SERIAL=$(_generate_serial_suffix)
+NEW_HOSTNAME="rmg-sign-${DEVICE_SERIAL}"
+CURRENT_HOSTNAME=$(hostname 2>/dev/null || echo "")
+
+if [ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ]; then
+  hostnamectl set-hostname "$NEW_HOSTNAME" 2>/dev/null || hostname "$NEW_HOSTNAME" || true
+  # Mettre à jour /etc/hosts
+  if grep -q "127.0.1.1" /etc/hosts 2>/dev/null; then
+    sed -i "s/127\.0\.1\.1.*/127.0.1.1\t$NEW_HOSTNAME/" /etc/hosts
+  else
+    echo -e "127.0.1.1\t$NEW_HOSTNAME" >> /etc/hosts
+  fi
+  echo "  → Hostname défini : $NEW_HOSTNAME"
+else
+  echo "  → Hostname déjà correct : $NEW_HOSTNAME"
+fi
+
+# Autoriser le service à corriger le hostname si nécessaire (fallback Flask)
+HOSTNAMECTL_PATH=$(command -v hostnamectl 2>/dev/null || echo "/usr/bin/hostnamectl")
+echo "$SERVICE_USER ALL=(ALL) NOPASSWD: $HOSTNAMECTL_PATH" > /etc/sudoers.d/rmg_hostname
+chmod 440 /etc/sudoers.d/rmg_hostname
+
 # ─── 3. Dossiers et permissions
 echo "[3/6] Création des dossiers..."
 mkdir -p "$MEDIA_DIR"
@@ -157,7 +204,8 @@ echo "  Projet    : $PROJECT_DIR"
 echo "  Médias    : $MEDIA_DIR"
 echo "  Logs app  : $LOG_FILE"
 echo "  Logs svc  : sudo journalctl -u rmg_signage -f"
-echo "  Interface : http://<ip-du-pi>:5000"
+echo "  Série     : $NEW_HOSTNAME"
+echo "  Interface : http://$NEW_HOSTNAME.local:5000  (ou via IP)"
 echo ""
 echo "  Redémarrez le Pi pour appliquer le boot silencieux :"
 echo "  sudo reboot"
