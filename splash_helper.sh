@@ -1,10 +1,8 @@
 #!/bin/bash
-# Helper pour afficher/effacer le splash RMG sur tty1 via mpv (DRM/KMS)
-# Utilisé par le service systemd en ExecStartPre / ExecStopPost.
-#
-# NOTE : On utilise mpv (déjà requis par l'appli) plutôt que fbi.
-# fbi utilise l'interface legacy /dev/fb0 qui entre en conflit avec le
-# --vo=drm de mpv principal (même pipeline DRM/KMS sous vc4-kms-v3d).
+# DÉPRÉCIÉ — conservé à titre de fallback uniquement.
+# Le splash au boot est désormais géré par Plymouth (thème rmg-signage).
+# Ce script n'est plus appelé par le service systemd depuis l'intégration Plymouth.
+# Il peut être invoqué manuellement sur des systèmes sans Plymouth.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPLASH_IMG="$SCRIPT_DIR/static/splash.png"

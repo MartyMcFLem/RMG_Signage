@@ -850,13 +850,12 @@ def start_mpv(override_cmd=None, boot_delay=True):
             threading.Thread(target=_pregen, daemon=True).start()
         else:
             _welcome_ready.set()
-        # Délai de 4s : laisse le splash (mpv DRM) être tué par le watcher de
-        # splash_helper.sh et libérer le device DRM avant que ce mpv ne démarre.
-        time.sleep(4)
+        # Délai court : laisse le temps à Plymouth de libérer le DRM
+        # (plymouth quit --retain-splash appelé par start_rmg_signage.sh).
+        time.sleep(1)
         _welcome_ready.wait(timeout=30)  # attend max 30s que le welcome soit prêt
     elif boot_delay:
-        # override_cmd fourni au boot (rare) — on attend quand même la libération DRM
-        time.sleep(4)
+        time.sleep(1)
 
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:

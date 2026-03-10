@@ -40,11 +40,11 @@ cd "$SCRIPT_DIR"
 python3 "$SCRIPT_PATH" >> "$LOG_FILE" 2>&1 &
 PY_PID=$!
 
-# Signal de readiness pour splash_helper.sh.
-# On attend que Flask soit réellement en écoute sur :5000 (pas juste un sleep fixe)
-# afin que le splash soit visible assez longtemps et que le device DRM soit libéré
-# AVANT que le mpv principal prenne la main.
-log "Attente de Flask sur :5000 (max 30s)..."
+# Signal de readiness.
+# On attend que Flask soit réellement en écoute (pas juste un sleep fixe)
+# pour que Plymouth puisse quitter proprement et libérer le DRM à MPV.
+FLASK_PORT="${RMG_SIGNAGE_PORT:-5000}"
+log "Attente de Flask sur :${FLASK_PORT} (max 30s)..."
 FLASK_READY=0
 for _i in $(seq 1 30); do
   if ! kill -0 "$PY_PID" 2>/dev/null; then
@@ -52,7 +52,7 @@ for _i in $(seq 1 30); do
     break
   fi
   if python3 -c \
-    "import socket,sys; s=socket.socket(); s.settimeout(1); r=s.connect_ex(('127.0.0.1',5000)); s.close(); sys.exit(0 if r==0 else 1)" \
+    "import socket,sys; s=socket.socket(); s.settimeout(1); r=s.connect_ex(('127.0.0.1',$FLASK_PORT)); s.close(); sys.exit(0 if r==0 else 1)" \
     2>/dev/null; then
     FLASK_READY=1
     log "Flask prêt après ${_i}s"
@@ -62,6 +62,12 @@ for _i in $(seq 1 30); do
 done
 
 if [ "$FLASK_READY" -eq 1 ]; then
+  # Quitter Plymouth pour libérer le DRM — MPV prendra ensuite la main.
+  # --retain-splash : Plymouth garde une copie statique visible le temps que MPV démarre.
+  if command -v plymouth &>/dev/null && plymouth --ping 2>/dev/null; then
+    plymouth quit --retain-splash 2>/dev/null || true
+    log "Plymouth libéré (DRM disponible pour MPV)"
+  fi
   READY_FILE="/run/rmg_signage/ready"
   if touch "$READY_FILE" 2>/dev/null; then
     log "Readiness signalée : $READY_FILE"
@@ -73,6 +79,7 @@ elif ! kill -0 "$PY_PID" 2>/dev/null; then
   log "⚠️  Python mort avant que Flask soit prêt"
 else
   log "⚠️  Flask non disponible après 30s — readiness signalée quand même"
+  plymouth quit 2>/dev/null || true
   touch "/run/rmg_signage/ready" 2>/dev/null || touch "/tmp/rmg_signage-ready" 2>/dev/null || true
 fi
 

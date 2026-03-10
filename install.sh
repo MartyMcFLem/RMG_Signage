@@ -61,9 +61,7 @@ echo ""
 # ─── 1. Paquets système
 echo "[1/6] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core
-  # Note : fbi retiré — le splash utilise désormais mpv (--vo=drm) pour éviter
-  # le conflit DRM/KMS avec le processus mpv principal (vc4-kms-v3d sur Pi OS Bookworm)
+apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core plymouth
 
 # ─── 2. Utilisateur et groupes
 echo "[2/6] Configuration de l'utilisateur '$SERVICE_USER'..."
@@ -152,6 +150,7 @@ for BOOT_DIR in /boot/firmware /boot; do
 done
 
 if [ -n "$CONFIG_FILE" ]; then
+  # Désactiver le splash arc-en-ciel du GPU Pi (≠ Plymouth)
   if ! grep -q "disable_splash" "$CONFIG_FILE"; then
     printf "\n# RMG Signage — boot silencieux\ndisable_splash=1\n" >> "$CONFIG_FILE"
   fi
@@ -159,12 +158,81 @@ if [ -n "$CONFIG_FILE" ]; then
     cp "$CMDLINE_FILE" "$CMDLINE_FILE.bak"
     # Redirectionner les messages boot vers tty3 (écran vide pour l'utilisateur)
     sed -i 's/console=tty1/console=tty3/g' "$CMDLINE_FILE"
-    # Masquer les messages kernel, le logo et le curseur clignotant
-    sed -i 's/$/ quiet loglevel=3 logo.nologo vt.global_cursor_default=0 rd.systemd.show_status=false/' "$CMDLINE_FILE"
+    # Masquer les messages kernel, le logo, le curseur et activer Plymouth
+    sed -i 's/$/ quiet splash loglevel=3 logo.nologo vt.global_cursor_default=0 rd.systemd.show_status=false plymouth.ignore-serial-consoles/' "$CMDLINE_FILE"
+  elif [ -f "$CMDLINE_FILE" ] && ! grep -q "splash" "$CMDLINE_FILE"; then
+    # quiet déjà présent mais pas splash — l'ajouter
+    sed -i 's/quiet/quiet splash plymouth.ignore-serial-consoles/' "$CMDLINE_FILE"
   fi
-  echo "  → Boot silencieux configuré ($CONFIG_FILE)"
+  echo "  → Boot silencieux + Plymouth configuré ($CONFIG_FILE)"
 else
   echo "  ⚠️  /boot/config.txt introuvable — boot silencieux non appliqué (normal hors Pi)"
+fi
+
+# ─── 5b. Thème Plymouth (splash au boot Linux)
+echo "[5b/6] Configuration du thème Plymouth..."
+PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/rmg-signage"
+mkdir -p "$PLYMOUTH_THEME_DIR"
+
+# Copier l'image splash
+if [ -f "$PROJECT_DIR/static/splash.png" ]; then
+  cp "$PROJECT_DIR/static/splash.png" "$PLYMOUTH_THEME_DIR/splash.png"
+  echo "  → splash.png copié"
+fi
+
+# Descripteur du thème
+cat > "$PLYMOUTH_THEME_DIR/rmg-signage.plymouth" << 'PLYM_EOF'
+[Plymouth Theme]
+Name=RMG Signage
+Description=RMG Signage boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/rmg-signage
+ScriptFile=/usr/share/plymouth/themes/rmg-signage/rmg-signage.script
+PLYM_EOF
+
+# Script Plymouth (affiche splash.png centré sur fond noir)
+cat > "$PLYMOUTH_THEME_DIR/rmg-signage.script" << 'PLYM_EOF'
+screen_width  = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+// Fond noir
+bg = Sprite(Image.Fill(screen_width, screen_height, 0, 0, 0, 1.0));
+bg.SetZ(-100);
+
+// Logo centré, redimensionné si nécessaire
+logo_image = Image("splash.png");
+lw = logo_image.GetWidth();
+lh = logo_image.GetHeight();
+
+max_w = Math.Floor(screen_width  * 0.7);
+max_h = Math.Floor(screen_height * 0.7);
+if (lw > max_w || lh > max_h) {
+    if ((lw * max_h) > (lh * max_w)) {
+        new_h = Math.Floor(lh * max_w / lw);
+        new_w = max_w;
+    } else {
+        new_w = Math.Floor(lw * max_h / lh);
+        new_h = max_h;
+    }
+    logo_image = logo_image.Scale(new_w, new_h);
+    lw = new_w;
+    lh = new_h;
+}
+
+logo = Sprite(logo_image);
+logo.SetX(Math.Floor((screen_width  - lw) / 2));
+logo.SetY(Math.Floor((screen_height - lh) / 2));
+PLYM_EOF
+
+# Activer le thème et reconstruire l'initramfs
+if command -v plymouth-set-default-theme &>/dev/null; then
+  plymouth-set-default-theme rmg-signage -R 2>/dev/null \
+    && echo "  → Thème Plymouth activé + initramfs mis à jour" \
+    || echo "  ⚠️  Impossible de reconstruire l'initramfs (plymouth-set-default-theme -R)"
+else
+  echo "  ⚠️  plymouth-set-default-theme introuvable — Plymouth non configuré"
 fi
 
 # ─── 6. Service systemd (généré dynamiquement avec les chemins réels)
@@ -172,7 +240,7 @@ echo "[6/6] Déploiement du service systemd..."
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
 Description=RMG Signage - Flask & MPV (${BRANCH})
-After=network.target
+After=network.target plymouth.service
 Wants=network.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
@@ -191,9 +259,7 @@ Environment=RMG_SIGNAGE_BRANCH=$BRANCH
 Environment=RMG_SIGNAGE_PORT=$PORT
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
-ExecStartPre=+/bin/bash $PROJECT_DIR/splash_helper.sh start
 ExecStart=/bin/bash $PROJECT_DIR/start_rmg_signage.sh
-ExecStopPost=+/bin/bash $PROJECT_DIR/splash_helper.sh stop
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
