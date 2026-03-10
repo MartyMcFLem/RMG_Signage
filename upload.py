@@ -16,7 +16,7 @@ CONFIG_FILE = os.environ.get("RMG_SIGNAGE_CONFIG_FILE", os.path.join(MEDIA_DIR, 
 MPV_BINARY = shutil.which("mpv") or "mpv"
 GIT_BINARY = shutil.which("git") or "/usr/bin/git"
 MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
-MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", "/home/rmg/.config/mpv")
+MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", os.path.join(HOME_DIR, ".config", "mpv"))
 LOG_FILE = os.path.join(MEDIA_DIR, "rmg_signage-mpv.log")
 
 # Configuration par défaut
@@ -317,6 +317,8 @@ def get_mpv_cmd():
     except:
         pass
 
+    rotation = config.get('rotation', 0)
+
     # Mode fichier unique
     if config.get('single_file_mode') and config.get('selected_file'):
         selected_path = os.path.join(MEDIA_DIR, config['selected_file'])
@@ -324,6 +326,7 @@ def get_mpv_cmd():
             cmd_single = [MPV_BINARY, f"--config-dir={mpv_conf_dir}"]
             if lua_script:
                 cmd_single.append(f"--script={lua_script}")
+            cmd_single.append(f"--video-rotate={rotation}")
             cmd_single += ["--loop-file=inf", selected_path]
             return cmd_single
 
@@ -338,7 +341,7 @@ def get_mpv_cmd():
         # Pas de médias : afficher l'écran de bienvenue avec l'adresse IP
         welcome = generate_welcome_screen()
         if welcome and os.path.exists(welcome):
-            cmd_welcome = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", "--loop-file=inf", welcome]
+            cmd_welcome = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", welcome]
             return cmd_welcome
         return None
 
@@ -355,6 +358,7 @@ def get_mpv_cmd():
     cmd = [MPV_BINARY, f"--config-dir={mpv_conf_dir}"]
     if lua_script:
         cmd.append(f"--script={lua_script}")
+    cmd.append(f"--video-rotate={rotation}")
     if config['loop']:
         cmd.append("--loop-playlist=inf")
     if config['shuffle']:
@@ -504,6 +508,7 @@ def manage_config():
             elif old_config.get('shuffle') != config.get('shuffle'):
                 restart_mpv()
             elif old_config.get('rotation') != config.get('rotation'):
+                send_mpv_command(["set_property", "video-rotate", config.get('rotation', 0)])
                 restart_mpv()
         else:
             restart_mpv()
