@@ -281,7 +281,7 @@ def generate_welcome_screen():
     try:
         from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
         ip = get_local_ip()
-        url = f"http://{ip}:5000"
+        url = f"http://{ip}:{FLASK_PORT}"
         W, H = 1920, 1080
         cx, cy = W // 2, H // 2
 
