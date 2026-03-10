@@ -13,13 +13,24 @@ Ce document décrit l'installation sur Raspberry Pi OS Lite (headless, sans inte
 > **Le dépôt doit être public** pour utiliser la méthode HTTPS sans credentials.
 > Si votre fork est privé, consultez la section [Dépôt privé](#dépôt-privé) ci-dessous.
 
-### Option A — Bootstrap (tout-en-un, recommandé)
-
-Une seule commande : télécharge et exécute l'installateur directement.
+### Production (branche `main`)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash
 ```
+
+### Développement (branche `DEV`)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/MartyMcFLem/RMG_Signage/main/bootstrap.sh | sudo bash -s -- --dev
+```
+
+| | Production | Développement |
+|---|---|---|
+| Branche | `main` | `DEV` |
+| Répertoire | `/opt/rmg_signage` | `/opt/rmg_signage_dev` |
+| Service | `rmg_signage` | `rmg_signage_dev` |
+| Port | `5000` | `5001` |
 
 ### Option B — Clone puis install
 
@@ -29,11 +40,13 @@ git clone https://github.com/MartyMcFLem/RMG_Signage.git
 cd RMG_Signage
 
 # 2. Lancer l'installateur (en tant que root)
-sudo bash install.sh
+sudo bash install.sh           # production
+sudo bash install.sh --dev     # développement  (via bootstrap-dev.sh ou flag)
 ```
 
-C'est tout. Le script `install.sh` fait tout automatiquement :
+Ce script `install.sh` fait tout automatiquement :
 - Installe les paquets système (`mpv`, `python3-venv`, `git`)
+- Génère le **numéro de série** de l'appareil et configure le hostname (`rmg-sign-XXXXXXXXX`)
 - Crée les dossiers nécessaires
 - Met en place le virtualenv Python et installe les dépendances
 - **Configure le boot silencieux** (supprime le splash RPi et les messages kernel)
@@ -48,9 +61,25 @@ sudo bash install.sh --user pi
 # Changer le dossier des médias
 sudo bash install.sh --media-dir /mnt/usb/medias
 
+# Installer sur une branche et un port spécifiques
+sudo bash install.sh --branch DEV --port 5001 --service-name rmg_signage_dev
+
 # Combiné
 sudo bash install.sh --user pi --media-dir /mnt/usb/medias
 ```
+
+## Numéro de série de l'appareil
+
+À l'installation, un numéro de série unique est automatiquement généré et appliqué comme hostname du Pi :
+
+```
+rmg-sign-XXXXXXXXX
+```
+
+- Basé sur le CPU serial du Raspberry Pi (priorité)
+- Sinon : UUID aléatoire persisté dans `/etc/rmg_serial`
+- Le Pi est accessible sur le réseau via `rmg-sign-XXXXXXXXX.local`
+- Le serial est exposé dans l'API : `GET /api/status` → champ `serial`
 
 ## Boot silencieux
 
@@ -64,20 +93,33 @@ Pour le splash personnalisé, déposez votre image dans `static/splash.png`
 
 ## Emplacements importants
 
+### Production
+
 | Élément | Chemin |
 |---|---|
-| Projet | Auto-détecté (chemin du `git clone`) |
+| Projet | `/opt/rmg_signage` |
 | Médias | `/home/rmg/signage/medias` |
-| Log application | `/home/rmg/rmg_signage.log` |
+| Log service | `sudo journalctl -u rmg_signage -f` |
 | Log MPV | `/home/rmg/signage/medias/rmg_signage-mpv.log` |
 | Service systemd | `/etc/systemd/system/rmg_signage.service` |
-| Interface web | `http://<ip-du-pi>:5000` |
+| Interface web | `http://rmg-sign-XXXXXXXXX.local:5000` |
+
+### Développement
+
+| Élément | Chemin |
+|---|---|
+| Projet | `/opt/rmg_signage_dev` |
+| Médias | `/home/rmg/signage/medias` |
+| Log service | `sudo journalctl -u rmg_signage_dev -f` |
+| Service systemd | `/etc/systemd/system/rmg_signage_dev.service` |
+| Interface web | `http://rmg-sign-XXXXXXXXX.local:5001` |
 
 ## Gestion du service
 
 ```bash
 # Voir les logs en temps réel
-sudo journalctl -u rmg_signage -f
+sudo journalctl -u rmg_signage -f        # production
+sudo journalctl -u rmg_signage_dev -f    # développement
 
 # Statut
 sudo systemctl status rmg_signage
@@ -93,10 +135,12 @@ sudo systemctl stop rmg_signage
 
 Depuis l'interface web → section "Mise à jour" → bouton "Mettre à jour".
 
+La mise à jour cible automatiquement la bonne branche (`main` ou `DEV`) selon l'environnement installé.
+
 Ou manuellement :
 ```bash
-cd /chemin/vers/RMG_Signage
-git pull origin main
+cd /opt/rmg_signage       # ou /opt/rmg_signage_dev
+git pull origin main      # ou DEV
 sudo systemctl restart rmg_signage
 ```
 
@@ -121,7 +165,6 @@ git clone git@github.com:MartyMcFLem/RMG_Signage.git
 **Le service ne démarre pas**
 ```bash
 sudo journalctl -u rmg_signage -n 50
-cat /home/rmg/rmg_signage.log
 ```
 
 **MPV ne lit pas les médias**
@@ -134,4 +177,3 @@ cat /home/rmg/signage/medias/rmg_signage-mpv.log
 sudo systemctl stop rmg_signage
 sudo bash install.sh
 ```
-
