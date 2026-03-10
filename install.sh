@@ -61,7 +61,7 @@ echo ""
 # ─── 1. Paquets système
 echo "[1/6] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core plymouth
+apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core plymouth plymouth-themes
 
 # ─── 2. Utilisateur et groupes
 echo "[2/6] Configuration de l'utilisateur '$SERVICE_USER'..."
