@@ -60,34 +60,34 @@ ALLOWED_UPLOAD_EXTENSIONS = {
 }
 
 
-_SERIAL_PATTERN = re.compile(r'^rmg-sign-[a-z0-9]{9}$')
+_SERIAL_PATTERN = re.compile(r'^rmg-sign-[a-z0-9]{16}$')
 
 # Serial mis en cache au démarrage
 _device_serial = None
 
 
 def _generate_serial_suffix():
-    """Génère 9 caractères alphanumériques pour le serial (CPU serial Pi ou UUID)."""
-    # Méthode 1 : CPU serial du Raspberry Pi
+    """Génère le suffixe du serial : CPU serial Pi complet (16 chars) ou UUID fallback."""
+    # Méthode 1 : CPU serial du Raspberry Pi (positions [10:26] de la ligne Serial)
     try:
         with open('/proc/cpuinfo', 'r') as f:
             for line in f:
                 if line.startswith('Serial'):
-                    suffix = re.sub(r'[^0-9a-f]', '', line.split(':')[-1].strip())
-                    if len(suffix) >= 9:
-                        return suffix[-9:]
+                    suffix = line[10:26].strip()
+                    if len(suffix) == 16 and re.match(r'^[0-9a-f]{16}$', suffix):
+                        return suffix
     except Exception:
         pass
-    # Méthode 2 : UUID aléatoire persisté
+    # Méthode 2 : UUID aléatoire persisté (16 chars hex)
     serial_file = '/etc/rmg_serial'
     try:
         if os.path.exists(serial_file):
             stored = open(serial_file).read().strip()
-            if len(stored) == 9:
+            if len(stored) == 16:
                 return stored
     except Exception:
         pass
-    suffix = _uuid.uuid4().hex[:9]
+    suffix = _uuid.uuid4().hex[:16]
     try:
         with open(serial_file, 'w') as f:
             f.write(suffix)

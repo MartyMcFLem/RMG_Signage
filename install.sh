@@ -77,22 +77,22 @@ usermod -aG video,render,input,tty "$SERVICE_USER" 2>/dev/null || true
 echo "[2b/6] Génération du numéro de série..."
 
 _generate_serial_suffix() {
-  # Méthode 1 : CPU serial du Raspberry Pi (dernier 9 chars hex)
+  # Méthode 1 : CPU serial du Raspberry Pi complet (chars [10:26], 16 chars hex)
   local serial
-  serial=$(grep -m1 "^Serial" /proc/cpuinfo 2>/dev/null | awk '{print $NF}' | tr -cd '0-9a-f')
-  if [ ${#serial} -ge 9 ]; then
-    echo "${serial: -9}"
+  serial=$(grep -m1 "^Serial" /proc/cpuinfo 2>/dev/null | cut -c11-26 | tr -cd '0-9a-f')
+  if [ ${#serial} -eq 16 ]; then
+    echo "$serial"
     return
   fi
   # Méthode 2 : UUID aléatoire (persisté dans /etc/rmg_serial)
   local serial_file="/etc/rmg_serial"
-  if [ -f "$serial_file" ]; then
-    cat "$serial_file"
+  if [ -f "$serial_file" ] && [ "$(wc -c < "$serial_file")" -ge 16 ]; then
+    head -c 16 "$serial_file"
     return
   fi
-  serial=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-' | cut -c1-9)
+  serial=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-' | cut -c1-16)
   if [ -z "$serial" ]; then
-    serial=$(date +%s%N | sha256sum | cut -c1-9)
+    serial=$(date +%s%N | sha256sum | cut -c1-16)
   fi
   echo "$serial" > "$serial_file"
   echo "$serial"
