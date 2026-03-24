@@ -599,6 +599,59 @@
     }
     .toast.show { transform: translateY(0); opacity: 1; }
 
+    /* ── Dashboard alert banner ──────────────────────── */
+    .dash-alert {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: filter .15s;
+      border: 1px solid;
+    }
+    .dash-alert:hover { filter: brightness(.96); }
+    .dash-alert.show { display: flex; }
+    .dash-alert-update {
+      background: linear-gradient(135deg, rgba(251,146,60,.08) 0%, rgba(249,115,22,.12) 100%);
+      border-color: rgba(249,115,22,.25);
+      color: #9a3412;
+    }
+    .dark .dash-alert-update {
+      background: linear-gradient(135deg, rgba(251,146,60,.12) 0%, rgba(249,115,22,.18) 100%);
+      border-color: rgba(249,115,22,.3);
+      color: #fb923c;
+    }
+    .dash-alert-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 18px;
+    }
+    .dash-alert-update .dash-alert-icon {
+      background: rgba(249,115,22,.15);
+    }
+    .dash-alert-text { flex: 1; }
+    .dash-alert-text strong { display: block; font-size: 14px; margin-bottom: 2px; }
+    .dash-alert-text span { font-size: 12px; opacity: .7; }
+    .dash-alert-action {
+      padding: 7px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .dash-alert-update .dash-alert-action {
+      background: #f97316;
+      color: #fff;
+    }
+
     /* ── Page visibility ──────────────────────────────── */
     .page-section { display: none; }
     .page-section.active { display: block; }
@@ -648,6 +701,15 @@
       <div class="page-head">
         <h1>Dashboard</h1>
         <p>Vue d'ensemble de votre systeme d'affichage</p>
+      </div>
+
+      <div class="dash-alert dash-alert-update" id="dashUpdateAlert" onclick="goTo('settings')">
+        <div class="dash-alert-icon">&#8593;</div>
+        <div class="dash-alert-text">
+          <strong>Mise a jour disponible</strong>
+          <span>Une nouvelle version est disponible. Rendez-vous dans Parametres pour l'installer.</span>
+        </div>
+        <button class="dash-alert-action" onclick="event.stopPropagation();goTo('settings')">Mettre a jour</button>
       </div>
 
       <div class="dash-grid">
@@ -1252,23 +1314,29 @@
 
     // ── Git update ────────────────────────────────────────
     async function loadGitStatus() {
+      const alert = document.getElementById('dashUpdateAlert');
       try {
         const data = await fetch('/api/update/status').then(r => r.json());
         const el = document.getElementById('gitInfo');
         if (data.success) {
           if (data.up_to_date === false) {
             el.innerHTML = '<span class="git-badge git-outdated">Mise a jour disponible</span>';
+            alert.classList.add('show');
           } else if (data.up_to_date === true) {
             el.innerHTML = '<span class="git-badge git-uptodate">A jour</span>';
             document.getElementById('navVersion').textContent = 'v' + (data.commit || '?');
+            alert.classList.remove('show');
           } else {
             el.innerHTML = '<span style="color:var(--text-2);font-size:12px">Statut inconnu</span>';
+            alert.classList.remove('show');
           }
         } else {
           el.innerHTML = '<span style="color:var(--red);font-size:12px">'+(data.message||'git non disponible')+'</span>';
+          alert.classList.remove('show');
         }
       } catch(e) {
         document.getElementById('gitInfo').innerHTML = '<span style="color:var(--text-2)">git non disponible</span>';
+        alert.classList.remove('show');
       }
     }
     async function runUpdate() {
