@@ -496,6 +496,38 @@
     .update-output.show { display: block; }
     .ctrl-update { background: var(--blue); color: #fff; grid-column: span 2; }
 
+    /* ── Storage bar ──────────────────────────────────── */
+    .storage-bar-wrap {
+      margin-bottom: 14px;
+    }
+    .storage-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-2);
+      margin-bottom: 5px;
+    }
+    .storage-bar {
+      height: 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .storage-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width .4s ease, background .3s;
+      background: var(--blue);
+    }
+    .storage-bar-fill.warn { background: #f97316; }
+    .storage-bar-fill.crit { background: var(--red); }
+    .storage-tier {
+      font-size: 11px;
+      color: var(--text-2);
+      margin-top: 4px;
+    }
+
     /* ── Toast ───────────────────────────────────────── */
     .toast {
       position: fixed;
@@ -545,6 +577,23 @@
             <div class="upload-progress-bar"></div>
           </div>
           <input type="file" id="fileInput" multiple accept="image/*,video/*">
+        </div>
+      </div>
+
+      <!-- Stockage -->
+      <div class="card">
+        <div class="card-head"><h2>Stockage</h2></div>
+        <div class="card-body">
+          <div class="storage-bar-wrap" id="storageWidget">
+            <div class="storage-label">
+              <span id="storageUsed">--</span>
+              <span id="storageTotal">--</span>
+            </div>
+            <div class="storage-bar">
+              <div class="storage-bar-fill" id="storageBarFill" style="width:0%"></div>
+            </div>
+            <div class="storage-tier" id="storageTier"></div>
+          </div>
         </div>
       </div>
 
@@ -878,9 +927,15 @@
       prog.style.display = 'none';
       fileInput.value = '';
       if (res.ok) {
-        loadGallery();
-        const n = files.length;
-        showToast(n + ' fichier' + (n > 1 ? 's' : '') + ' envoyé' + (n > 1 ? 's' : ''));
+        // Vérifier si redirigé avec erreur quota
+        if (res.url && res.url.includes('error=quota')) {
+          showToast('Espace insuffisant — supprimez des fichiers ou augmentez le quota');
+        } else {
+          loadGallery();
+          loadStorage();
+          const n = files.length;
+          showToast(n + ' fichier' + (n > 1 ? 's' : '') + ' envoyé' + (n > 1 ? 's' : ''));
+        }
       }
     }
 
@@ -1000,6 +1055,7 @@
       if (!confirm('Supprimer « ' + filename + ' » ?')) return;
       await fetch('/api/delete/' + encodeURIComponent(filename), { method: 'DELETE' });
       loadGallery();
+      loadStorage();
       showToast(filename + ' supprimé');
     }
     async function control(action) {
@@ -1066,11 +1122,48 @@
       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Mettre à jour';
     }
 
+    // ── Storage ────────────────────────────────────────────
+    async function loadStorage() {
+      try {
+        const data = await fetch('/api/storage').then(r => r.json());
+        const used = data.used_mb || 0;
+        const total = data.total_mb || 1;
+        const pct = data.usage_percent || 0;
+        const tier = data.tier || '';
+
+        document.getElementById('storageUsed').textContent = used >= 1024
+          ? (used / 1024).toFixed(1) + ' Go utilisés'
+          : used + ' Mo utilisés';
+        document.getElementById('storageTotal').textContent = total >= 1024
+          ? (total / 1024).toFixed(1) + ' Go'
+          : total + ' Mo';
+
+        const fill = document.getElementById('storageBarFill');
+        fill.style.width = Math.min(pct, 100) + '%';
+        fill.classList.remove('warn', 'crit');
+        if (pct >= 90) fill.classList.add('crit');
+        else if (pct >= 70) fill.classList.add('warn');
+
+        const tierEl = document.getElementById('storageTier');
+        if (tier) {
+          tierEl.textContent = 'Licence : ' + tier;
+        }
+      } catch (e) {
+        // Storage info not available
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────
     loadConfig();
     loadGallery();
     loadGitStatus();
-    setInterval(() => { if (!isDragging) loadGallery(); }, 5000);
+    loadStorage();
+    // Quota check on page load (redirect with ?error=quota)
+    if (window.location.search.includes('error=quota')) {
+      showToast('Espace insuffisant — supprimez des fichiers ou augmentez le quota');
+      history.replaceState(null, '', '/');
+    }
+    setInterval(() => { if (!isDragging) { loadGallery(); loadStorage(); } }, 5000);
   </script>
 </body>
 </html>

@@ -25,6 +25,14 @@ LOG_FILE = os.path.join(MEDIA_DIR, "rmg_signage-mpv.log")
 GIT_BRANCH = os.environ.get("RMG_SIGNAGE_BRANCH", "main")
 FLASK_PORT  = int(os.environ.get("RMG_SIGNAGE_PORT", 5000))
 
+# Nom du service systemd et répertoire projet
+SERVICE_NAME = os.environ.get("RMG_SIGNAGE_SERVICE", "rmg_signage")
+PROJECT_DIR = os.environ.get("RMG_SIGNAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
+
+# Licence (quota stockage)
+LICENSE_FILE = os.environ.get("RMG_SIGNAGE_LICENSE", "/etc/rmg_signage/license.json")
+DEFAULT_MEDIA_QUOTA_MB = 4096  # 4 Go par défaut
+
 # Configuration par défaut
 config = {
     "image_duration": 8,
@@ -58,6 +66,71 @@ ALLOWED_UPLOAD_EXTENSIONS = {
     '.heic', '.heif',
     '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'
 }
+
+
+def _read_license():
+    """Lit le fichier de licence et retourne ses données."""
+    try:
+        if os.path.exists(LICENSE_FILE):
+            with open(LICENSE_FILE, 'r') as f:
+                return json.load(f)
+    except (IOError, json.JSONDecodeError, ValueError):
+        pass
+    return {"tier": "standard", "media_quota_mb": DEFAULT_MEDIA_QUOTA_MB}
+
+
+def get_storage_info():
+    """Retourne les informations de stockage de la partition média.
+    Utilise df sur MEDIA_DIR (fonctionne que ce soit une partition dédiée ou non)."""
+    license_data = _read_license()
+    quota_mb = license_data.get("media_quota_mb", DEFAULT_MEDIA_QUOTA_MB)
+
+    info = {
+        "quota_mb": quota_mb,
+        "tier": license_data.get("tier", "standard"),
+        "used_mb": 0,
+        "available_mb": 0,
+        "total_mb": 0,
+        "usage_percent": 0,
+        "is_dedicated_partition": False,
+    }
+
+    try:
+        stat = os.statvfs(MEDIA_DIR)
+        block_size = stat.f_frsize
+        total_bytes = stat.f_blocks * block_size
+        free_bytes = stat.f_bavail * block_size  # available to non-root
+        used_bytes = (stat.f_blocks - stat.f_bfree) * block_size
+
+        info["total_mb"] = round(total_bytes / (1024 * 1024))
+        info["used_mb"] = round(used_bytes / (1024 * 1024))
+        info["available_mb"] = round(free_bytes / (1024 * 1024))
+
+        # Détecter si c'est une partition dédiée (taille ~= quota)
+        if abs(info["total_mb"] - quota_mb) < max(quota_mb * 0.1, 100):
+            info["is_dedicated_partition"] = True
+
+        if info["total_mb"] > 0:
+            info["usage_percent"] = round((info["used_mb"] / info["total_mb"]) * 100, 1)
+    except OSError:
+        pass
+
+    return info
+
+
+def check_upload_quota(file_size_bytes):
+    """Vérifie si un upload de file_size_bytes octets tient dans le quota.
+    Retourne (ok, message)."""
+    storage = get_storage_info()
+    file_size_mb = file_size_bytes / (1024 * 1024)
+
+    if storage["available_mb"] < file_size_mb + 10:  # 10 MB de marge
+        return False, f"Espace insuffisant : {storage['available_mb']} MB disponibles, {file_size_mb:.0f} MB requis"
+
+    if storage["usage_percent"] >= 95:
+        return False, f"Partition média presque pleine ({storage['usage_percent']}%)"
+
+    return True, ""
 
 
 _SERIAL_PATTERN = re.compile(r'^rmg-sign-[a-z0-9]{16}$')
@@ -473,23 +546,31 @@ def upload():
     if request.method == "POST":
         files = request.files.getlist("files")
         files_saved = 0
+        files_rejected_quota = 0
         for f in files:
             if not f.filename:
                 continue
-            # Sécuriser le nom de fichier (évite path traversal)
             safe_name = secure_filename(f.filename)
             if not safe_name:
                 continue
-            # Vérifier l'extension
             ext = os.path.splitext(safe_name.lower())[1]
             if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+                continue
+            # Vérifier le quota avant chaque fichier
+            f.seek(0, 2)  # seek to end
+            file_size = f.tell()
+            f.seek(0)     # reset
+            quota_ok, _msg = check_upload_quota(file_size)
+            if not quota_ok:
+                files_rejected_quota += 1
                 continue
             path = os.path.join(MEDIA_DIR, safe_name)
             f.save(path)
             files_saved += 1
         if files_saved:
-            # Déclencher la mise à jour MPV (remplace l'écran de bienvenue si actif)
             update_mpv_playlist()
+        if files_rejected_quota > 0 and files_saved == 0:
+            return redirect("/?error=quota")
         return redirect("/")
 
     return render_template('index.html')
@@ -522,6 +603,18 @@ def manage_logo():
 
 # === API ENDPOINTS ===
 
+@app.route("/api/storage")
+def api_storage():
+    """Retourne les informations de stockage de la partition média"""
+    return jsonify(get_storage_info())
+
+
+@app.route("/api/license")
+def api_license():
+    """Retourne les informations de licence"""
+    return jsonify(_read_license())
+
+
 @app.route("/api/status")
 def get_status():
     """Retourne l'état actuel de mpv"""
@@ -531,11 +624,13 @@ def get_status():
                            if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)])
     except Exception:
         media_count = 0
+    storage = get_storage_info()
     return jsonify({
         "mpv_running": running,
         "media_count": media_count,
         "media_dir": MEDIA_DIR,
         "serial": get_device_serial(),
+        "storage": storage,
     })
 
 
@@ -711,7 +806,7 @@ def play_all_files():
 @app.route("/api/update/status", methods=["GET"])
 def update_git_status():
     """Retourne les informations git actuelles (branche locale + dernier commit de origin/main)"""
-    script_dir = os.environ.get("RMG_SIGNAGE_DIR", "/home/rmg/PhotoFrame")
+    script_dir = PROJECT_DIR
     try:
         # État local
         commit = subprocess.check_output(
@@ -756,7 +851,7 @@ def update_git_status():
 @app.route("/api/update", methods=["POST"])
 def update_from_github():
     """Bascule sur main, aligne sur origin/main et redémarre si nécessaire"""
-    script_dir = os.environ.get("RMG_SIGNAGE_DIR", "/home/rmg/PhotoFrame")
+    script_dir = PROJECT_DIR
     try:
         before = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
