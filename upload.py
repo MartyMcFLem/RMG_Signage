@@ -57,7 +57,9 @@ config = {
     "single_file_mode": False,
     "selected_file": None,
     "file_order": [],        # ordre personnalisé des fichiers
-    "file_durations": {}     # durées par fichier {"photo.jpg": 12}
+    "file_durations": {},    # durées par fichier {"photo.jpg": 12}
+    "playlists": [],         # [{id, name, files, created}]
+    "active_playlist": None  # id de la playlist active (None = tous les fichiers)
 }
 
 if os.path.exists(CONFIG_FILE):
@@ -593,27 +595,34 @@ def get_mpv_cmd():
         all_files = []
 
     if not all_files:
-        # Pas de médias : afficher l'écran de bienvenue avec l'adresse IP.
-        # Si le fichier a déjà été généré (pré-génération parallèle dans start_mpv),
-        # on le réutilise directement pour éviter une double génération coûteuse.
         welcome_path = os.path.join(MEDIA_DIR, ".welcome_screen.png")
         if os.path.exists(welcome_path) and (time.time() - os.path.getmtime(welcome_path)) < 300:
             welcome = welcome_path
         else:
             welcome = generate_welcome_screen()
         if welcome and os.path.exists(welcome):
-            cmd_welcome = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", welcome]
-            return cmd_welcome
-        # Fallback : utiliser splash.png si le welcome screen n'a pas pu être généré
+            return [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", welcome]
         script_dir = os.path.dirname(os.path.abspath(__file__))
         splash_path = os.path.join(script_dir, 'static', 'splash.png')
         if os.path.exists(splash_path):
-            print("⚠️  Fallback welcome screen → splash.png")
             return [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", splash_path]
         return None
 
-    # Appliquer l'ordre personnalisé si shuffle désactivé
-    if not config.get('shuffle') and config.get('file_order'):
+    # Si une playlist est active, filtrer les fichiers
+    active_pl_id = config.get('active_playlist')
+    if active_pl_id:
+        playlists = config.get('playlists', [])
+        pl = next((p for p in playlists if p.get('id') == active_pl_id), None)
+        if pl and pl.get('files'):
+            all_set = set(all_files)
+            pl_files = [f for f in pl['files'] if f in all_set]
+            if pl_files:
+                final_files = pl_files
+            else:
+                final_files = sorted(all_files)
+        else:
+            final_files = sorted(all_files)
+    elif not config.get('shuffle') and config.get('file_order'):
         order = config['file_order']
         all_set = set(all_files)
         ordered = [f for f in order if f in all_set]
@@ -804,6 +813,10 @@ def delete_file(filename):
             # Retirer du file_order
             if filename in config.get('file_order', []):
                 config['file_order'].remove(filename)
+            # Retirer des playlists
+            for pl in config.get('playlists', []):
+                if filename in pl.get('files', []):
+                    pl['files'].remove(filename)
             try:
                 with open(CONFIG_FILE, 'w') as f:
                     json.dump(config, f, indent=2)
@@ -936,6 +949,127 @@ def play_all_files():
     global config
     config['single_file_mode'] = False
     config['selected_file'] = None
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    restart_mpv()
+    return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
+
+
+# === PLAYLISTS API ===
+
+@app.route("/api/playlists", methods=["GET"])
+def get_playlists():
+    """Liste toutes les playlists"""
+    playlists = config.get('playlists', [])
+    active = config.get('active_playlist')
+    return jsonify({"playlists": playlists, "active_playlist": active})
+
+
+@app.route("/api/playlists", methods=["POST"])
+def create_playlist():
+    """Cree une nouvelle playlist. JSON: {name, files?}"""
+    global config
+    data = request.json
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({"success": False, "message": "Nom requis"}), 400
+    if 'playlists' not in config:
+        config['playlists'] = []
+    pl = {
+        "id": _uuid.uuid4().hex[:12],
+        "name": name,
+        "files": data.get('files', []),
+        "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    config['playlists'].append(pl)
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    return jsonify({"success": True, "playlist": pl})
+
+
+@app.route("/api/playlists/<pl_id>", methods=["GET"])
+def get_playlist(pl_id):
+    """Retourne une playlist par son id"""
+    pl = next((p for p in config.get('playlists', []) if p['id'] == pl_id), None)
+    if not pl:
+        return jsonify({"success": False, "message": "Playlist introuvable"}), 404
+    return jsonify(pl)
+
+
+@app.route("/api/playlists/<pl_id>", methods=["PUT"])
+def update_playlist(pl_id):
+    """Met a jour une playlist. JSON: {name?, files?}"""
+    global config
+    pl = next((p for p in config.get('playlists', []) if p['id'] == pl_id), None)
+    if not pl:
+        return jsonify({"success": False, "message": "Playlist introuvable"}), 404
+    data = request.json
+    if 'name' in data:
+        pl['name'] = (data['name'] or '').strip() or pl['name']
+    if 'files' in data:
+        pl['files'] = data['files']
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    # Si c'est la playlist active, redemarrer mpv
+    if config.get('active_playlist') == pl_id:
+        restart_mpv()
+    return jsonify({"success": True, "playlist": pl})
+
+
+@app.route("/api/playlists/<pl_id>", methods=["DELETE"])
+def delete_playlist(pl_id):
+    """Supprime une playlist"""
+    global config
+    playlists = config.get('playlists', [])
+    before = len(playlists)
+    config['playlists'] = [p for p in playlists if p['id'] != pl_id]
+    if len(config['playlists']) == before:
+        return jsonify({"success": False, "message": "Playlist introuvable"}), 404
+    # Desactiver si c'etait la playlist active
+    if config.get('active_playlist') == pl_id:
+        config['active_playlist'] = None
+        restart_mpv()
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    return jsonify({"success": True, "message": "Playlist supprimee"})
+
+
+@app.route("/api/playlists/<pl_id>/activate", methods=["POST"])
+def activate_playlist(pl_id):
+    """Active une playlist pour la lecture"""
+    global config
+    pl = next((p for p in config.get('playlists', []) if p['id'] == pl_id), None)
+    if not pl:
+        return jsonify({"success": False, "message": "Playlist introuvable"}), 404
+    config['active_playlist'] = pl_id
+    config['single_file_mode'] = False
+    config['selected_file'] = None
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    restart_mpv()
+    return jsonify({"success": True, "message": f"Playlist '{pl['name']}' activee"})
+
+
+@app.route("/api/playlists/deactivate", methods=["POST"])
+def deactivate_playlist():
+    """Desactive la playlist, revient a la lecture de tous les fichiers"""
+    global config
+    config['active_playlist'] = None
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
