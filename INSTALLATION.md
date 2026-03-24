@@ -192,21 +192,18 @@ Le système utilise des clés de licence pour contrôler le quota de stockage m�
 
 ### Tiers disponibles
 
-| Tier | Quota | Clé format |
-|---|---|---|
-| Starter | 2 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
-| Standard | 4 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
-| Professional | 8 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
-| Enterprise | 16 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
-| Unlimited | 24 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
-
-Sans licence, le quota par défaut est de 2 Go.
+| Tier | Stockage | Medias max | Clé |
+|---|---|---|---|
+| Sans licence | 2 Go | 10 | -- |
+| Standard | 4 Go | 100 | `RMGS-XXXXX-XXXXX-XXXXX` |
+| Business | 12 Go | 1 000 | `RMGS-XXXXX-XXXXX-XXXXX` |
+| Unlimited | 24 Go | Illimité | `RMGS-XXXXX-XXXXX-XXXXX` |
 
 ### Activer une licence
 
 1. Ouvrir l'interface web → **Paramètres** → **Licence**
 2. Entrer la clé et cliquer **Activer**
-3. Le quota est immédiatement mis à jour
+3. Le quota et la limite de fichiers sont immédiatement mis à jour
 
 ### Générer des clés (admin)
 
@@ -214,8 +211,8 @@ Sans licence, le quota par défaut est de 2 Go.
 # Générer 1 clé standard
 python3 generate_keys.py --tier standard
 
-# Générer 10 clés professional
-python3 generate_keys.py --tier professional --count 10
+# Générer 10 clés business
+python3 generate_keys.py --tier business --count 10
 
 # Valider une clé
 python3 generate_keys.py --validate "RMGS-XXXXX-XXXXX-XXXXX"

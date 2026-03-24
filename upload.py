@@ -38,12 +38,12 @@ DEFAULT_MEDIA_QUOTA_MB = 2048  # 2 Go par défaut (sans licence)
 # Payload = tier_byte (1) + random (5) + HMAC-SHA256[:3] (3) = 9 bytes → 15 chars base32
 # Tiers disponibles :
 LICENSE_TIERS = {
-    0x01: {"name": "starter",       "quota_mb": 2048},    # 2 Go
-    0x02: {"name": "standard",      "quota_mb": 4096},    # 4 Go
-    0x03: {"name": "professional",  "quota_mb": 8192},    # 8 Go
-    0x04: {"name": "enterprise",    "quota_mb": 16384},   # 16 Go
-    0x05: {"name": "unlimited",     "quota_mb": 24576},   # 24 Go
+    0x01: {"name": "standard",  "quota_mb": 4096,  "max_files": 100},
+    0x02: {"name": "business",  "quota_mb": 12288, "max_files": 1000},
+    0x03: {"name": "unlimited", "quota_mb": 24576, "max_files": 0},   # 0 = illimite
 }
+# Limite par defaut sans licence
+DEFAULT_MAX_FILES = 10
 # Clé secrète pour la validation HMAC (suffisante pour un système embarqué offline)
 _LICENSE_SECRET = b"RMG-S1gn4g3-2024-s3cr3t-k3y"
 
@@ -154,56 +154,79 @@ def _save_license(data):
         return False
 
 
-def get_storage_info():
-    """Retourne les informations de stockage de la partition média.
-    Utilise df sur MEDIA_DIR (fonctionne que ce soit une partition dédiée ou non)."""
-    license_data = _read_license()
-    quota_mb = license_data.get("media_quota_mb", DEFAULT_MEDIA_QUOTA_MB)
-
-    info = {
-        "quota_mb": quota_mb,
-        "tier": license_data.get("tier", "standard"),
-        "used_mb": 0,
-        "available_mb": 0,
-        "total_mb": 0,
-        "usage_percent": 0,
-        "is_dedicated_partition": False,
-    }
-
+def _count_media_files():
+    """Compte le nombre de fichiers media dans MEDIA_DIR."""
     try:
-        stat = os.statvfs(MEDIA_DIR)
-        block_size = stat.f_frsize
-        total_bytes = stat.f_blocks * block_size
-        free_bytes = stat.f_bavail * block_size  # available to non-root
-        used_bytes = (stat.f_blocks - stat.f_bfree) * block_size
+        return len([f for f in os.listdir(MEDIA_DIR)
+                    if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)])
+    except OSError:
+        return 0
 
-        info["total_mb"] = round(total_bytes / (1024 * 1024))
-        info["used_mb"] = round(used_bytes / (1024 * 1024))
-        info["available_mb"] = round(free_bytes / (1024 * 1024))
 
-        # Détecter si c'est une partition dédiée (taille ~= quota)
-        if abs(info["total_mb"] - quota_mb) < max(quota_mb * 0.1, 100):
-            info["is_dedicated_partition"] = True
-
-        if info["total_mb"] > 0:
-            info["usage_percent"] = round((info["used_mb"] / info["total_mb"]) * 100, 1)
+def _get_media_files_size_mb():
+    """Calcule la taille totale des fichiers media uniquement (en MB)."""
+    total = 0
+    try:
+        for f in os.listdir(MEDIA_DIR):
+            fpath = os.path.join(MEDIA_DIR, f)
+            if os.path.isfile(fpath) and is_media_file(f):
+                total += os.path.getsize(fpath)
     except OSError:
         pass
+    return round(total / (1024 * 1024), 1)
 
-    return info
+
+def get_storage_info():
+    """Retourne les informations de stockage de la partition media.
+    N'affiche que l'espace utilise par les medias (pas l'OS/systeme)."""
+    license_data = _read_license()
+    tier = license_data.get("tier", "none")
+    quota_mb = license_data.get("media_quota_mb", DEFAULT_MEDIA_QUOTA_MB)
+
+    # Limites de fichiers selon le tier
+    max_files = DEFAULT_MAX_FILES
+    for _code, tinfo in LICENSE_TIERS.items():
+        if tinfo["name"] == tier:
+            max_files = tinfo["max_files"]
+            break
+
+    media_used_mb = _get_media_files_size_mb()
+    media_count = _count_media_files()
+
+    # Espace disponible : quota licence - espace utilise par les medias
+    available_mb = max(0, round(quota_mb - media_used_mb, 1))
+    usage_percent = round((media_used_mb / quota_mb) * 100, 1) if quota_mb > 0 else 0
+
+    return {
+        "quota_mb": quota_mb,
+        "tier": tier,
+        "used_mb": media_used_mb,
+        "available_mb": available_mb,
+        "total_mb": quota_mb,
+        "usage_percent": min(usage_percent, 100),
+        "media_count": media_count,
+        "max_files": max_files,
+        "files_remaining": max(0, max_files - media_count) if max_files > 0 else -1,
+    }
 
 
 def check_upload_quota(file_size_bytes):
-    """Vérifie si un upload de file_size_bytes octets tient dans le quota.
-    Retourne (ok, message)."""
+    """Verifie si un upload de file_size_bytes octets tient dans le quota.
+    Retourne (ok, error_code) avec error_code: '' | 'quota' | 'files'."""
     storage = get_storage_info()
     file_size_mb = file_size_bytes / (1024 * 1024)
 
-    if storage["available_mb"] < file_size_mb + 10:  # 10 MB de marge
-        return False, f"Espace insuffisant : {storage['available_mb']} MB disponibles, {file_size_mb:.0f} MB requis"
+    # Limite nombre de fichiers
+    max_f = storage["max_files"]
+    if max_f > 0 and storage["media_count"] >= max_f:
+        return False, "files"
+
+    # Limite espace disque
+    if storage["available_mb"] < file_size_mb + 5:
+        return False, "quota"
 
     if storage["usage_percent"] >= 95:
-        return False, f"Partition média presque pleine ({storage['usage_percent']}%)"
+        return False, "quota"
 
     return True, ""
 
@@ -621,7 +644,7 @@ def upload():
     if request.method == "POST":
         files = request.files.getlist("files")
         files_saved = 0
-        files_rejected_quota = 0
+        reject_reason = ""
         for f in files:
             if not f.filename:
                 continue
@@ -631,21 +654,20 @@ def upload():
             ext = os.path.splitext(safe_name.lower())[1]
             if ext not in ALLOWED_UPLOAD_EXTENSIONS:
                 continue
-            # Vérifier le quota avant chaque fichier
-            f.seek(0, 2)  # seek to end
+            f.seek(0, 2)
             file_size = f.tell()
-            f.seek(0)     # reset
-            quota_ok, _msg = check_upload_quota(file_size)
+            f.seek(0)
+            quota_ok, err_code = check_upload_quota(file_size)
             if not quota_ok:
-                files_rejected_quota += 1
+                reject_reason = err_code
                 continue
             path = os.path.join(MEDIA_DIR, safe_name)
             f.save(path)
             files_saved += 1
         if files_saved:
             update_mpv_playlist()
-        if files_rejected_quota > 0 and files_saved == 0:
-            return redirect("/?error=quota")
+        if reject_reason and files_saved == 0:
+            return redirect("/?error=" + reject_reason)
         return redirect("/")
 
     return render_template('index.html')
@@ -688,9 +710,16 @@ def api_storage():
 def api_license():
     """Retourne les informations de licence (sans la clé complète)"""
     lic = _read_license()
+    tier = lic.get("tier", "none")
+    max_files = DEFAULT_MAX_FILES
+    for _code, tinfo in LICENSE_TIERS.items():
+        if tinfo["name"] == tier:
+            max_files = tinfo["max_files"]
+            break
     safe = {
-        "tier": lic.get("tier", "none"),
+        "tier": tier,
         "media_quota_mb": lic.get("media_quota_mb", DEFAULT_MEDIA_QUOTA_MB),
+        "max_files": max_files,
         "activated": lic.get("activated", None),
         "key_preview": lic.get("key_preview", None),
     }

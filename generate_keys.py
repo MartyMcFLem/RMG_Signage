@@ -3,8 +3,8 @@
 
 Usage:
     python3 generate_keys.py                    # 1 cle standard
-    python3 generate_keys.py --tier enterprise  # 1 cle enterprise
-    python3 generate_keys.py --tier professional --count 10  # 10 cles pro
+    python3 generate_keys.py --tier business    # 1 cle business
+    python3 generate_keys.py --tier unlimited --count 10  # 10 cles unlimited
     python3 generate_keys.py --list-tiers       # afficher les tiers
 """
 import argparse

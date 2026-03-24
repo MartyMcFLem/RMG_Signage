@@ -232,20 +232,114 @@
       margin-bottom: 6px;
     }
     .storage-bar {
-      height: 10px;
+      height: 12px;
       background: var(--bg);
-      border-radius: 5px;
+      border-radius: 6px;
       overflow: hidden;
       border: 1px solid var(--border);
+      position: relative;
     }
     .storage-fill {
       height: 100%;
-      border-radius: 5px;
-      transition: width .5s ease;
-      background: var(--blue);
+      border-radius: 6px;
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+      background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #d946ef 100%);
+      position: relative;
     }
-    .storage-fill.warn { background: var(--orange); }
-    .storage-fill.crit { background: var(--red); }
+    .storage-fill::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,.25) 0%, transparent 60%);
+      border-radius: 6px;
+    }
+    .storage-fill.warn {
+      background: linear-gradient(90deg, #f97316 0%, #ef4444 100%);
+    }
+    .storage-fill.crit {
+      background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+    }
+    .storage-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-3);
+    }
+    .storage-files-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+
+    /* ── Playback panel ───────────────────────────────── */
+    .player-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .player-now {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(59,130,246,.08) 0%, rgba(139,92,246,.08) 100%);
+      border: 1px solid rgba(59,130,246,.15);
+    }
+    .dark .player-now {
+      background: linear-gradient(135deg, rgba(59,130,246,.12) 0%, rgba(139,92,246,.12) 100%);
+      border-color: rgba(59,130,246,.2);
+    }
+    .player-now-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .player-now-dot.on  { background: var(--green); animation: pulse 2s infinite; box-shadow: 0 0 8px rgba(34,197,94,.4); }
+    .player-now-dot.off { background: var(--text-3); }
+    .player-now-info { flex: 1; min-width: 0; }
+    .player-now-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+    .player-now-title { font-size: 14px; font-weight: 600; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player-controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .player-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 14px 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: all .15s;
+      color: var(--text);
+    }
+    .player-btn:hover {
+      border-color: var(--blue);
+      background: rgba(59,130,246,.04);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,.06);
+    }
+    .player-btn:active { transform: scale(.97); }
+    .player-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .player-btn span { font-size: 11px; font-weight: 600; color: var(--text-2); }
+    .player-btn.accent { border-color: var(--blue); background: rgba(59,130,246,.06); }
+    .player-btn.accent:hover { background: rgba(59,130,246,.12); }
+    .player-btn.danger:hover { border-color: var(--red); background: rgba(250,62,62,.04); }
+    .player-btn-wide { grid-column: span 3; flex-direction: row; gap: 8px; padding: 12px; }
 
     /* ── Status dot ──────────────────────────────────── */
     .status-dot {
@@ -468,11 +562,9 @@
       font-size: 11px; font-weight: 700;
       text-transform: uppercase; letter-spacing: .5px;
     }
-    .badge-none         { background: var(--bg);  color: var(--text-3); border: 1px solid var(--border); }
-    .badge-starter      { background: #dbeafe; color: #1d4ed8; }
-    .badge-standard     { background: #d1fae5; color: #065f46; }
-    .badge-professional { background: #ede9fe; color: #5b21b6; }
-    .badge-enterprise   { background: #fef3c7; color: #92400e; }
+    .badge-none      { background: var(--bg);  color: var(--text-3); border: 1px solid var(--border); }
+    .badge-standard  { background: #dbeafe; color: #1d4ed8; }
+    .badge-business  { background: #ede9fe; color: #5b21b6; }
     .badge-unlimited    { background: #1c1e21; color: #fff; }
 
     /* ── Notes ────────────────────────────────────────── */
@@ -578,7 +670,7 @@
 
       <!-- Storage -->
       <div class="card">
-        <div class="card-head"><h2>Stockage</h2></div>
+        <div class="card-head"><h2>Stockage medias</h2></div>
         <div class="card-body">
           <div class="storage-label">
             <span id="storageUsed">--</span>
@@ -587,24 +679,47 @@
           <div class="storage-bar">
             <div class="storage-fill" id="storageFill" style="width:0%"></div>
           </div>
-          <div style="font-size:11px;color:var(--text-3);margin-top:6px" id="storagePct"></div>
+          <div class="storage-meta">
+            <span id="storagePct"></span>
+            <span class="storage-files-badge" id="storageFiles">-- fichiers</span>
+          </div>
         </div>
       </div>
 
       <!-- Playback controls -->
       <div class="card">
-        <div class="card-head"><h2>Controle de lecture</h2></div>
+        <div class="card-head"><h2>Lecteur</h2></div>
         <div class="card-body">
-          <div class="now-playing" id="nowPlaying" style="display:none;margin-bottom:14px;padding:10px 13px;border-radius:8px;background:#eef4ff;border:1px solid #c0d4f8;font-size:13px;color:var(--blue);align-items:center;gap:8px">
-            <span class="status-dot on"></span>
-            <span>En cours : <strong id="nowPlayingName"></strong></span>
-          </div>
-          <div class="btn-grid">
-            <button class="btn btn-ghost" onclick="control('restart')">Redemarrer</button>
-            <button class="btn btn-red btn-sm" onclick="control('stop')">Arreter</button>
-            <button class="btn btn-blue btn-full" onclick="control('next')">Fichier suivant</button>
-            <button class="btn btn-purple btn-full" onclick="control('show-ip')">Afficher IP</button>
-            <button class="btn btn-green btn-full" id="playAllBtn" style="display:none" onclick="playAll()">Tous les medias</button>
+          <div class="player-panel">
+            <div class="player-now" id="playerNow">
+              <div class="player-now-dot" id="playerDot"></div>
+              <div class="player-now-info">
+                <div class="player-now-label" id="playerLabel">Lecteur</div>
+                <div class="player-now-title" id="playerTitle">--</div>
+              </div>
+            </div>
+            <div class="player-controls">
+              <button class="player-btn" onclick="control('restart')" title="Redemarrer">
+                <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                <span>Relancer</span>
+              </button>
+              <button class="player-btn accent" onclick="control('next')" title="Suivant">
+                <svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                <span>Suivant</span>
+              </button>
+              <button class="player-btn danger" onclick="control('stop')" title="Arreter">
+                <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                <span>Arreter</span>
+              </button>
+              <button class="player-btn player-btn-wide" onclick="control('show-ip')" title="Afficher IP">
+                <svg viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Afficher IP sur ecran</span>
+              </button>
+              <button class="player-btn player-btn-wide btn-green" id="playAllBtn" style="display:none" onclick="playAll()">
+                <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21"/></svg>
+                <span>Lire tous les medias</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -727,10 +842,11 @@
       <div class="card">
         <div class="card-head"><h2>Licence</h2></div>
         <div class="card-body">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
             <span>Niveau :</span>
             <span class="license-badge" id="licenseBadge">--</span>
             <span style="font-size:12px;color:var(--text-2)" id="licenseQuota"></span>
+            <span style="font-size:12px;color:var(--text-3)" id="licenseMaxFiles"></span>
           </div>
           <div style="font-size:12px;color:var(--text-3)" id="licenseKeyPreview"></div>
           <div class="license-input-row">
@@ -835,18 +951,44 @@
           document.getElementById('navSerialFull').textContent = status.serial;
         }
 
-        // Storage
+        // Storage — only media usage (not OS)
         const used = storage.used_mb || 0;
         const total = storage.total_mb || 1;
         const pct = storage.usage_percent || 0;
-        document.getElementById('storageUsed').textContent = used >= 1024 ? (used/1024).toFixed(1)+' Go' : used+' Mo';
-        document.getElementById('storageTotal').textContent = total >= 1024 ? (total/1024).toFixed(1)+' Go' : total+' Mo';
+        const fmtSize = mb => mb >= 1024 ? (mb/1024).toFixed(1)+' Go' : mb+' Mo';
+        document.getElementById('storageUsed').textContent = fmtSize(used) + ' utilises';
+        document.getElementById('storageTotal').textContent = fmtSize(total);
         document.getElementById('storagePct').textContent = pct + '% utilise';
         const fill = document.getElementById('storageFill');
         fill.style.width = Math.min(pct, 100) + '%';
         fill.classList.remove('warn','crit');
         if (pct >= 90) fill.classList.add('crit');
         else if (pct >= 70) fill.classList.add('warn');
+        // Files count + limit
+        const mCount = storage.media_count || 0;
+        const maxF = storage.max_files || 0;
+        const filesEl = document.getElementById('storageFiles');
+        if (maxF > 0) {
+          filesEl.textContent = mCount + ' / ' + maxF + ' fichiers';
+          if (mCount >= maxF) filesEl.style.color = 'var(--red)';
+          else filesEl.style.color = '';
+        } else {
+          filesEl.textContent = mCount + ' fichiers';
+        }
+
+        // Player panel
+        const dot = document.getElementById('playerDot');
+        const pLabel = document.getElementById('playerLabel');
+        const pTitle = document.getElementById('playerTitle');
+        if (status.mpv_running) {
+          dot.className = 'player-now-dot on';
+          pLabel.textContent = 'En lecture';
+          pTitle.textContent = status.media_count + ' media' + (status.media_count > 1 ? 's' : '') + ' en rotation';
+        } else {
+          dot.className = 'player-now-dot off';
+          pLabel.textContent = 'Lecteur';
+          pTitle.textContent = 'Arrete';
+        }
       } catch(e) {}
     }
 
@@ -863,14 +1005,15 @@
       refreshNowPlaying(cfg);
     }
     function refreshNowPlaying(cfg) {
-      const np = document.getElementById('nowPlaying');
+      const playAllBtn = document.getElementById('playAllBtn');
+      const pTitle = document.getElementById('playerTitle');
+      const pLabel = document.getElementById('playerLabel');
       if (cfg.single_file_mode && cfg.selected_file) {
-        np.style.display = 'flex';
-        document.getElementById('nowPlayingName').textContent = cfg.selected_file;
-        document.getElementById('playAllBtn').style.display = 'block';
+        if (pTitle) pTitle.textContent = cfg.selected_file;
+        if (pLabel) pLabel.textContent = 'Fichier unique';
+        playAllBtn.style.display = 'flex';
       } else {
-        np.style.display = 'none';
-        document.getElementById('playAllBtn').style.display = 'none';
+        playAllBtn.style.display = 'none';
       }
     }
     async function updateConfig() {
@@ -971,8 +1114,10 @@
       prog.style.display = 'none';
       fileInput.value = '';
       if (res.ok) {
-        if (res.url && res.url.includes('error=quota')) {
-          showToast('Espace insuffisant -- augmentez votre licence');
+        if (res.url && res.url.includes('error=files')) {
+          showToast('Nombre maximum de fichiers atteint -- augmentez votre licence');
+        } else if (res.url && res.url.includes('error=quota')) {
+          showToast('Espace de stockage insuffisant -- augmentez votre licence');
         } else {
           loadGallery(); loadDashboard();
           showToast(files.length + ' fichier' + (files.length>1?'s':'') + ' envoye' + (files.length>1?'s':''));
@@ -1070,6 +1215,9 @@
         const qMb = lic.media_quota_mb || 0;
         document.getElementById('licenseQuota').textContent =
           qMb >= 1024 ? (qMb/1024).toFixed(0)+' Go' : qMb+' Mo';
+        const maxF = lic.max_files || 0;
+        document.getElementById('licenseMaxFiles').textContent =
+          maxF > 0 ? '/ ' + maxF + ' fichiers max' : '/ illimite';
         const preview = document.getElementById('licenseKeyPreview');
         if (lic.key_preview) {
           preview.textContent = 'Cle : ' + lic.key_preview;
@@ -1144,8 +1292,11 @@
     const hash = window.location.hash.replace('#','');
     if (['dashboard','medias','settings'].includes(hash)) goTo(hash);
     // Quota error check
-    if (window.location.search.includes('error=quota')) {
-      showToast('Espace insuffisant -- augmentez votre licence');
+    if (window.location.search.includes('error=files')) {
+      showToast('Nombre maximum de fichiers atteint -- augmentez votre licence');
+      history.replaceState(null, '', '/');
+    } else if (window.location.search.includes('error=quota')) {
+      showToast('Espace de stockage insuffisant -- augmentez votre licence');
       history.replaceState(null, '', '/');
     }
 
