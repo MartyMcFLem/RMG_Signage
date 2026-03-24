@@ -652,36 +652,26 @@
       color: #fff;
     }
 
-    /* ── Sub-tabs ─────────────────────────────────────── */
-    .sub-tabs {
-      display: flex;
-      gap: 2px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 3px;
-      margin-bottom: 20px;
+    /* ── Sidebar dropdown ─────────────────────────────── */
+    .nav-group {}
+    .nav-sub {
+      display: none;
+      flex-direction: column;
+      padding-left: 28px;
+      gap: 1px;
     }
-    .sub-tab {
-      flex: 1;
-      padding: 8px 16px;
-      border: none;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      background: transparent;
-      color: var(--text-2);
-      transition: all .15s;
+    .nav-group.open .nav-sub { display: flex; }
+    .nav-chevron {
+      margin-left: auto;
+      font-size: 11px;
+      transition: transform .2s;
+      color: var(--text-3);
     }
-    .sub-tab:hover { color: var(--text); }
-    .sub-tab.active {
-      background: var(--surface);
-      color: var(--text);
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    .nav-group.open .nav-chevron { transform: rotate(90deg); }
+    .nav-sub .nav-link {
+      padding: 7px 12px;
+      font-size: 12.5px;
     }
-    .sub-panel { display: none; }
-    .sub-panel.active { display: block; }
 
     /* ── Playlist list ────────────────────────────────── */
     .pl-list { display: flex; flex-direction: column; gap: 8px; }
@@ -715,51 +705,119 @@
       color: var(--text-3);
       font-size: 13px;
     }
-    .pl-create-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .pl-create-input {
-      flex: 1;
-      padding: 9px 12px;
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-size: 13px;
-      background: var(--surface);
-      color: var(--text);
-    }
-    .pl-create-input:focus { outline: none; border-color: var(--blue); }
 
-    /* ── Playlist editor (modal-like inline) ──────────── */
-    .pl-editor {
+    /* ── Modal ────────────────────────────────────────── */
+    .modal-overlay {
       display: none;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      padding: 18px;
-      margin-bottom: 16px;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
     }
-    .pl-editor.show { display: block; }
-    .pl-editor-head {
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+      width: 560px;
+      max-width: 95vw;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-head {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
     }
-    .pl-editor-head h3 { font-size: 15px; font-weight: 700; }
-    .pl-file-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; max-height: 300px; overflow-y: auto; }
-    .pl-file-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-size: 13px;
+    .modal-head h3 { font-size: 16px; font-weight: 700; }
+    .modal-close {
+      width: 32px; height: 32px;
+      border: none; border-radius: 8px;
       background: var(--bg);
+      cursor: pointer;
+      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-2);
+      transition: background .15s;
     }
-    .pl-file-row .item-name { flex: 1; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pl-file-check { width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; }
+    .modal-close:hover { background: var(--border); }
+    .modal-body {
+      padding: 22px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-footer {
+      padding: 14px 22px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* ── Media picker grid (inside modal) ─────────────── */
+    .media-picker {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 8px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 2px;
+    }
+    .media-pick-item {
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      cursor: pointer;
+      transition: border-color .15s, transform .1s;
+      aspect-ratio: 1;
+    }
+    .media-pick-item:hover { border-color: var(--blue); transform: scale(1.02); }
+    .media-pick-item.selected { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(59,130,246,.3); }
+    .media-pick-item img {
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
+    }
+    .media-pick-check {
+      position: absolute;
+      top: 6px; right: 6px;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: rgba(0,0,0,.5);
+      border: 2px solid rgba(255,255,255,.6);
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .media-pick-item.selected .media-pick-check {
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+    .media-pick-item.selected .media-pick-check::after {
+      content: '';
+      width: 8px; height: 5px;
+      border-left: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(-45deg);
+      margin-bottom: 2px;
+    }
+    .media-pick-name {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 3px 6px;
+      background: rgba(0,0,0,.7);
+      font-size: 9px;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
 
     /* ── Page visibility ──────────────────────────────── */
     .page-section { display: none; }
@@ -787,10 +845,17 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Dashboard
       </button>
-      <button class="nav-link" data-page="medias" onclick="goTo('medias')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
-        Medias
-      </button>
+      <div class="nav-group" id="navGroupMedias">
+        <button class="nav-link" onclick="toggleMediasNav()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+          Medias
+          <span class="nav-chevron">&#9654;</span>
+        </button>
+        <div class="nav-sub">
+          <button class="nav-link" data-page="medias" onclick="goTo('medias')">Fichiers</button>
+          <button class="nav-link" data-page="playlists" onclick="goTo('playlists')">Playlists</button>
+        </div>
+      </div>
       <button class="nav-link" data-page="settings" onclick="goTo('settings')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Parametres
@@ -896,97 +961,96 @@
       </div>
     </section>
 
-    <!-- ═══════════ MEDIAS ═══════════ -->
+    <!-- ═══════════ MEDIAS (Fichiers) ═══════════ -->
     <section class="page-section" id="page-medias">
       <div class="page-head">
-        <h1>Mediatheque</h1>
+        <h1>Fichiers</h1>
         <p><span id="galleryCount">0 fichier</span></p>
       </div>
 
-      <!-- Sub-tabs -->
-      <div class="sub-tabs">
-        <button class="sub-tab active" onclick="showMediaTab('files')">Fichiers</button>
-        <button class="sub-tab" onclick="showMediaTab('playlists')">Playlists</button>
-      </div>
-
-      <!-- ── FILES TAB ── -->
-      <div class="sub-panel active" id="media-tab-files">
-        <!-- Upload -->
-        <div class="card">
-          <div class="card-head"><h2>Ajouter des medias</h2></div>
-          <div class="card-body">
-            <div class="upload-zone" id="uploadZone"
-                 onclick="document.getElementById('fileInput').click()">
-              <p style="font-size:28px;margin-bottom:8px">&#9729;</p>
-              <p>Glissez vos photos &amp; videos ici<br>ou cliquez pour choisir</p>
-              <span class="btn btn-blue btn-sm" style="margin-top:10px">Parcourir...</span>
-            </div>
-            <div class="upload-progress" id="uploadProgress">
-              <div class="upload-progress-bar"></div>
-            </div>
-            <input type="file" id="fileInput" multiple accept="image/*,video/*">
+      <div class="card">
+        <div class="card-head"><h2>Ajouter des medias</h2></div>
+        <div class="card-body">
+          <div class="upload-zone" id="uploadZone"
+               onclick="document.getElementById('fileInput').click()">
+            <p style="font-size:28px;margin-bottom:8px">&#9729;</p>
+            <p>Glissez vos photos &amp; videos ici<br>ou cliquez pour choisir</p>
+            <span class="btn btn-blue btn-sm" style="margin-top:10px">Parcourir...</span>
           </div>
-        </div>
-
-        <!-- Gallery -->
-        <div class="card">
-          <div class="card-head">
-            <h2>Fichiers</h2>
-            <span style="font-size:12px;color:var(--text-2)" id="headerCount">0</span>
+          <div class="upload-progress" id="uploadProgress">
+            <div class="upload-progress-bar"></div>
           </div>
-          <div class="card-body">
-            <div class="note note-warn" id="shuffleNote" style="display:none">
-              Mode aleatoire active -- desactivez-le dans les parametres pour personnaliser l'ordre.
-            </div>
-            <div class="note note-info" id="orderNote" style="display:none">
-              Glissez-deposez les vignettes pour definir l'ordre de lecture.
-            </div>
-            <div class="gallery" id="gallery"></div>
-          </div>
+          <input type="file" id="fileInput" multiple accept="image/*,video/*">
         </div>
       </div>
 
-      <!-- ── PLAYLISTS TAB ── -->
-      <div class="sub-panel" id="media-tab-playlists">
-        <div class="card">
-          <div class="card-head">
-            <h2>Playlists</h2>
-            <span style="font-size:12px;color:var(--text-2)" id="plCount">0</span>
+      <div class="card">
+        <div class="card-head">
+          <h2>Fichiers</h2>
+          <span style="font-size:12px;color:var(--text-2)" id="headerCount">0</span>
+        </div>
+        <div class="card-body">
+          <div class="note note-warn" id="shuffleNote" style="display:none">
+            Mode aleatoire active -- desactivez-le dans les parametres pour personnaliser l'ordre.
           </div>
-          <div class="card-body">
-            <!-- Create -->
-            <div class="pl-create-row">
-              <input type="text" class="pl-create-input" id="plNewName" placeholder="Nom de la nouvelle playlist..."
-                     onkeydown="if(event.key==='Enter')createPlaylist()">
-              <button class="btn btn-blue btn-sm" onclick="createPlaylist()">Creer</button>
-            </div>
+          <div class="note note-info" id="orderNote" style="display:none">
+            Glissez-deposez les vignettes pour definir l'ordre de lecture.
+          </div>
+          <div class="gallery" id="gallery"></div>
+        </div>
+      </div>
+    </section>
 
-            <!-- Active playlist banner -->
-            <div id="plActiveBanner" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);font-size:13px;display:none;align-items:center;gap:8px">
-              <span class="status-dot on" style="margin:0"></span>
-              <span>Playlist active : <strong id="plActiveName"></strong></span>
-              <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="deactivatePlaylist()">Lire tout</button>
-            </div>
+    <!-- ═══════════ PLAYLISTS ═══════════ -->
+    <section class="page-section" id="page-playlists">
+      <div class="page-head">
+        <h1>Playlists</h1>
+        <p>Organisez vos medias en playlists</p>
+      </div>
 
-            <!-- Editor (inline, shown when editing a playlist) -->
-            <div class="pl-editor" id="plEditor">
-              <div class="pl-editor-head">
-                <h3 id="plEditorTitle">Modifier la playlist</h3>
-                <button class="btn btn-ghost btn-sm" onclick="closePlEditor()">Fermer</button>
-              </div>
-              <p style="font-size:12px;color:var(--text-2);margin-bottom:10px">Cochez les fichiers a inclure dans cette playlist :</p>
-              <div class="pl-file-list" id="plEditorFiles"></div>
-              <button class="btn btn-blue btn-sm" onclick="savePlEditor()">Enregistrer</button>
-            </div>
+      <!-- Active playlist banner -->
+      <div id="plActiveBanner" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);font-size:13px;align-items:center;gap:10px">
+        <span class="status-dot on" style="margin:0"></span>
+        <span>Playlist active : <strong id="plActiveName"></strong></span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="deactivatePlaylist()">Lire tout</button>
+      </div>
 
-            <!-- List -->
-            <div class="pl-list" id="plList">
-              <div class="pl-empty">Aucune playlist. Creez-en une ci-dessus.</div>
-            </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Mes playlists</h2>
+          <button class="btn btn-blue btn-sm" onclick="openPlModal()">+ Nouvelle playlist</button>
+        </div>
+        <div class="card-body">
+          <div class="pl-list" id="plList">
+            <div class="pl-empty">Aucune playlist. Cliquez sur "+ Nouvelle playlist" pour commencer.</div>
           </div>
         </div>
       </div>
     </section>
+
+    <!-- ═══════════ Playlist Modal ═══════════ -->
+    <div class="modal-overlay" id="plModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h3 id="plModalTitle">Nouvelle playlist</h3>
+          <button class="modal-close" onclick="closePlModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:6px">Nom de la playlist</label>
+            <input type="text" id="plModalName" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)" placeholder="Ex: Promo ete 2026">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:8px">Selectionner les medias</label>
+            <div class="media-picker" id="plModalPicker"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closePlModal()">Annuler</button>
+          <button class="btn btn-blue" id="plModalSave" onclick="savePlModal()">Creer</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ═══════════ SETTINGS ═══════════ -->
     <section class="page-section" id="page-settings">
@@ -1118,6 +1182,12 @@
       if (sec) sec.classList.add('active');
       if (link) link.classList.add('active');
       window.location.hash = page;
+      // Auto-open medias dropdown if navigating to medias or playlists
+      const mg = document.getElementById('navGroupMedias');
+      if (page === 'medias' || page === 'playlists') {
+        mg.classList.add('open');
+      }
+      if (page === 'playlists') loadPlaylists();
       // Close mobile nav
       document.getElementById('sidebarNav').classList.remove('open');
       document.getElementById('navOverlay').classList.remove('open');
@@ -1125,6 +1195,9 @@
     function toggleNav() {
       document.getElementById('sidebarNav').classList.toggle('open');
       document.getElementById('navOverlay').classList.toggle('open');
+    }
+    function toggleMediasNav() {
+      document.getElementById('navGroupMedias').classList.toggle('open');
     }
 
     // ── Toast ─────────────────────────────────────────────
@@ -1514,24 +1587,15 @@
       btn.disabled = false; btn.textContent = 'Mettre a jour';
     }
 
-    // ── Media sub-tabs ──────────────────────────────────────
-    function showMediaTab(tab) {
-      document.querySelectorAll('#page-medias .sub-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('#page-medias .sub-panel').forEach(p => p.classList.remove('active'));
-      document.querySelector(`.sub-tab[onclick*="${tab}"]`).classList.add('active');
-      document.getElementById('media-tab-' + tab).classList.add('active');
-      if (tab === 'playlists') loadPlaylists();
-    }
-
     // ── Playlists ─────────────────────────────────────────
-    let _editingPlId = null;
+    let _plModalMode = 'create'; // 'create' or 'edit'
+    let _plModalId = null;
 
     async function loadPlaylists() {
       try {
         const data = await fetch('/api/playlists').then(r => r.json());
         const pls = data.playlists || [];
         const active = data.active_playlist;
-        document.getElementById('plCount').textContent = pls.length;
 
         // Active banner
         const banner = document.getElementById('plActiveBanner');
@@ -1540,16 +1604,12 @@
           if (aPl) {
             document.getElementById('plActiveName').textContent = aPl.name;
             banner.style.display = 'flex';
-          } else {
-            banner.style.display = 'none';
-          }
-        } else {
-          banner.style.display = 'none';
-        }
+          } else { banner.style.display = 'none'; }
+        } else { banner.style.display = 'none'; }
 
         const list = document.getElementById('plList');
         if (!pls.length) {
-          list.innerHTML = '<div class="pl-empty">Aucune playlist. Creez-en une ci-dessus.</div>';
+          list.innerHTML = '<div class="pl-empty">Aucune playlist. Cliquez sur "+ Nouvelle playlist" pour commencer.</div>';
           return;
         }
         list.innerHTML = pls.map(pl => {
@@ -1560,38 +1620,23 @@
               <div class="pl-icon">${isActive ? '&#9654;' : '&#9776;'}</div>
               <div class="pl-info">
                 <div class="pl-name">${pl.name}</div>
-                <div class="pl-meta">${n} media${n > 1 ? 's' : ''}${isActive ? ' &middot; En lecture' : ''}</div>
+                <div class="pl-meta">${n} media${n>1?'s':''}${isActive ? ' &middot; En lecture' : ''}</div>
               </div>
               <div class="pl-actions">
                 ${isActive
                   ? '<button class="btn btn-ghost btn-sm" onclick="deactivatePlaylist()">Stop</button>'
                   : '<button class="btn btn-blue btn-sm" onclick="activatePlaylist(\''+pl.id+'\')">Lire</button>'}
-                <button class="btn btn-ghost btn-sm" onclick="openPlEditor('${pl.id}')">Editer</button>
-                <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePlaylist('${pl.id}','${pl.name.replace(/'/g,"\\'")}')">Suppr.</button>
+                <button class="btn btn-ghost btn-sm" onclick="openPlModal(\''+pl.id+'\')">Editer</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePlaylist(\''+pl.id+'\',\''+pl.name.replace(/'/g,"\\'")+'\')">Suppr.</button>
               </div>
             </div>`;
         }).join('');
       } catch(e) {}
     }
 
-    async function createPlaylist() {
-      const input = document.getElementById('plNewName');
-      const name = input.value.trim();
-      if (!name) { showToast('Entrez un nom'); return; }
-      await fetch('/api/playlists', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name, files: []}),
-      });
-      input.value = '';
-      loadPlaylists();
-      showToast('Playlist "' + name + '" creee');
-    }
-
     async function deletePlaylist(id, name) {
       if (!confirm('Supprimer la playlist "' + name + '" ?')) return;
       await fetch('/api/playlists/' + id, {method: 'DELETE'});
-      if (_editingPlId === id) closePlEditor();
       loadPlaylists();
       showToast('Playlist supprimee');
     }
@@ -1600,62 +1645,94 @@
       const res = await fetch('/api/playlists/' + id + '/activate', {method: 'POST'});
       const data = await res.json();
       showToast(data.message);
-      loadPlaylists();
-      loadDashboard();
-      loadConfig();
+      loadPlaylists(); loadDashboard(); loadConfig();
     }
 
     async function deactivatePlaylist() {
       await fetch('/api/playlists/deactivate', {method: 'POST'});
       showToast('Lecture de tous les fichiers');
-      loadPlaylists();
-      loadDashboard();
-      loadConfig();
+      loadPlaylists(); loadDashboard(); loadConfig();
     }
 
-    async function openPlEditor(plId) {
-      _editingPlId = plId;
-      const [plData, allFiles] = await Promise.all([
-        fetch('/api/playlists/' + plId).then(r => r.json()),
-        fetch('/api/files').then(r => r.json()),
-      ]);
-      const editor = document.getElementById('plEditor');
-      document.getElementById('plEditorTitle').textContent = 'Modifier : ' + plData.name;
-      const plFiles = new Set(plData.files || []);
-      document.getElementById('plEditorFiles').innerHTML = allFiles.map(f => {
-        const checked = plFiles.has(f) ? 'checked' : '';
-        const safeF = f.replace(/"/g, '&quot;');
-        return `<div class="pl-file-row">
-          <input type="checkbox" class="pl-file-check" data-file="${safeF}" ${checked}>
-          <span class="item-name">${f}</span>
-        </div>`;
-      }).join('') || '<div style="color:var(--text-3);font-size:13px;padding:10px">Aucun fichier importe</div>';
-      editor.classList.add('show');
+    // ── Playlist Modal ────────────────────────────────────
+    async function openPlModal(editId) {
+      const allFiles = await fetch('/api/files').then(r => r.json());
+      let selectedFiles = new Set();
+      let name = '';
+
+      if (editId) {
+        _plModalMode = 'edit';
+        _plModalId = editId;
+        const plData = await fetch('/api/playlists/' + editId).then(r => r.json());
+        name = plData.name || '';
+        selectedFiles = new Set(plData.files || []);
+        document.getElementById('plModalTitle').textContent = 'Modifier la playlist';
+        document.getElementById('plModalSave').textContent = 'Enregistrer';
+      } else {
+        _plModalMode = 'create';
+        _plModalId = null;
+        document.getElementById('plModalTitle').textContent = 'Nouvelle playlist';
+        document.getElementById('plModalSave').textContent = 'Creer';
+      }
+
+      document.getElementById('plModalName').value = name;
+
+      // Media picker with thumbnails
+      const picker = document.getElementById('plModalPicker');
+      if (!allFiles.length) {
+        picker.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-3)">Aucun fichier importe</div>';
+      } else {
+        picker.innerHTML = allFiles.map(f => {
+          const sel = selectedFiles.has(f) ? ' selected' : '';
+          const safeF = f.replace(/"/g, '&quot;');
+          return `<div class="media-pick-item${sel}" data-file="${safeF}" onclick="togglePickItem(this)">
+            <img src="/media/${encodeURIComponent(f)}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%23333%22 width=%221%22 height=%221%22/></svg>'">
+            <div class="media-pick-check"></div>
+            <div class="media-pick-name">${f}</div>
+          </div>`;
+        }).join('');
+      }
+
+      document.getElementById('plModal').classList.add('show');
     }
 
-    function closePlEditor() {
-      _editingPlId = null;
-      document.getElementById('plEditor').classList.remove('show');
+    function togglePickItem(el) {
+      el.classList.toggle('selected');
     }
 
-    async function savePlEditor() {
-      if (!_editingPlId) return;
-      const checks = document.querySelectorAll('#plEditorFiles .pl-file-check');
-      const files = [];
-      checks.forEach(c => { if (c.checked) files.push(c.dataset.file); });
-      await fetch('/api/playlists/' + _editingPlId, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({files}),
-      });
-      showToast('Playlist enregistree (' + files.length + ' medias)');
-      closePlEditor();
+    function closePlModal() {
+      document.getElementById('plModal').classList.remove('show');
+      _plModalId = null;
+    }
+
+    async function savePlModal() {
+      const name = document.getElementById('plModalName').value.trim();
+      if (!name) { showToast('Entrez un nom'); return; }
+      const items = document.querySelectorAll('#plModalPicker .media-pick-item.selected');
+      const files = [...items].map(el => el.dataset.file);
+
+      if (_plModalMode === 'edit' && _plModalId) {
+        await fetch('/api/playlists/' + _plModalId, {
+          method: 'PUT',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({name, files}),
+        });
+        showToast('Playlist enregistree (' + files.length + ' medias)');
+      } else {
+        await fetch('/api/playlists', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({name, files}),
+        });
+        showToast('Playlist "' + name + '" creee');
+      }
+      closePlModal();
       loadPlaylists();
     }
 
     // ── Init ──────────────────────────────────────────────
     const hash = window.location.hash.replace('#','');
-    if (['dashboard','medias','settings'].includes(hash)) goTo(hash);
+    if (['dashboard','medias','playlists','settings'].includes(hash)) goTo(hash);
     if (window.location.search.includes('error=files')) {
       showToast('Nombre maximum de fichiers atteint -- augmentez votre licence');
       history.replaceState(null, '', '/');
