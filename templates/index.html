@@ -1514,11 +1514,148 @@
       btn.disabled = false; btn.textContent = 'Mettre a jour';
     }
 
+    // ── Media sub-tabs ──────────────────────────────────────
+    function showMediaTab(tab) {
+      document.querySelectorAll('#page-medias .sub-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('#page-medias .sub-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector(`.sub-tab[onclick*="${tab}"]`).classList.add('active');
+      document.getElementById('media-tab-' + tab).classList.add('active');
+      if (tab === 'playlists') loadPlaylists();
+    }
+
+    // ── Playlists ─────────────────────────────────────────
+    let _editingPlId = null;
+
+    async function loadPlaylists() {
+      try {
+        const data = await fetch('/api/playlists').then(r => r.json());
+        const pls = data.playlists || [];
+        const active = data.active_playlist;
+        document.getElementById('plCount').textContent = pls.length;
+
+        // Active banner
+        const banner = document.getElementById('plActiveBanner');
+        if (active) {
+          const aPl = pls.find(p => p.id === active);
+          if (aPl) {
+            document.getElementById('plActiveName').textContent = aPl.name;
+            banner.style.display = 'flex';
+          } else {
+            banner.style.display = 'none';
+          }
+        } else {
+          banner.style.display = 'none';
+        }
+
+        const list = document.getElementById('plList');
+        if (!pls.length) {
+          list.innerHTML = '<div class="pl-empty">Aucune playlist. Creez-en une ci-dessus.</div>';
+          return;
+        }
+        list.innerHTML = pls.map(pl => {
+          const isActive = pl.id === active;
+          const n = (pl.files || []).length;
+          return `
+            <div class="pl-item${isActive ? ' active-pl' : ''}">
+              <div class="pl-icon">${isActive ? '&#9654;' : '&#9776;'}</div>
+              <div class="pl-info">
+                <div class="pl-name">${pl.name}</div>
+                <div class="pl-meta">${n} media${n > 1 ? 's' : ''}${isActive ? ' &middot; En lecture' : ''}</div>
+              </div>
+              <div class="pl-actions">
+                ${isActive
+                  ? '<button class="btn btn-ghost btn-sm" onclick="deactivatePlaylist()">Stop</button>'
+                  : '<button class="btn btn-blue btn-sm" onclick="activatePlaylist(\''+pl.id+'\')">Lire</button>'}
+                <button class="btn btn-ghost btn-sm" onclick="openPlEditor('${pl.id}')">Editer</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePlaylist('${pl.id}','${pl.name.replace(/'/g,"\\'")}')">Suppr.</button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch(e) {}
+    }
+
+    async function createPlaylist() {
+      const input = document.getElementById('plNewName');
+      const name = input.value.trim();
+      if (!name) { showToast('Entrez un nom'); return; }
+      await fetch('/api/playlists', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, files: []}),
+      });
+      input.value = '';
+      loadPlaylists();
+      showToast('Playlist "' + name + '" creee');
+    }
+
+    async function deletePlaylist(id, name) {
+      if (!confirm('Supprimer la playlist "' + name + '" ?')) return;
+      await fetch('/api/playlists/' + id, {method: 'DELETE'});
+      if (_editingPlId === id) closePlEditor();
+      loadPlaylists();
+      showToast('Playlist supprimee');
+    }
+
+    async function activatePlaylist(id) {
+      const res = await fetch('/api/playlists/' + id + '/activate', {method: 'POST'});
+      const data = await res.json();
+      showToast(data.message);
+      loadPlaylists();
+      loadDashboard();
+      loadConfig();
+    }
+
+    async function deactivatePlaylist() {
+      await fetch('/api/playlists/deactivate', {method: 'POST'});
+      showToast('Lecture de tous les fichiers');
+      loadPlaylists();
+      loadDashboard();
+      loadConfig();
+    }
+
+    async function openPlEditor(plId) {
+      _editingPlId = plId;
+      const [plData, allFiles] = await Promise.all([
+        fetch('/api/playlists/' + plId).then(r => r.json()),
+        fetch('/api/files').then(r => r.json()),
+      ]);
+      const editor = document.getElementById('plEditor');
+      document.getElementById('plEditorTitle').textContent = 'Modifier : ' + plData.name;
+      const plFiles = new Set(plData.files || []);
+      document.getElementById('plEditorFiles').innerHTML = allFiles.map(f => {
+        const checked = plFiles.has(f) ? 'checked' : '';
+        const safeF = f.replace(/"/g, '&quot;');
+        return `<div class="pl-file-row">
+          <input type="checkbox" class="pl-file-check" data-file="${safeF}" ${checked}>
+          <span class="item-name">${f}</span>
+        </div>`;
+      }).join('') || '<div style="color:var(--text-3);font-size:13px;padding:10px">Aucun fichier importe</div>';
+      editor.classList.add('show');
+    }
+
+    function closePlEditor() {
+      _editingPlId = null;
+      document.getElementById('plEditor').classList.remove('show');
+    }
+
+    async function savePlEditor() {
+      if (!_editingPlId) return;
+      const checks = document.querySelectorAll('#plEditorFiles .pl-file-check');
+      const files = [];
+      checks.forEach(c => { if (c.checked) files.push(c.dataset.file); });
+      await fetch('/api/playlists/' + _editingPlId, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({files}),
+      });
+      showToast('Playlist enregistree (' + files.length + ' medias)');
+      closePlEditor();
+      loadPlaylists();
+    }
+
     // ── Init ──────────────────────────────────────────────
-    // Route from hash
     const hash = window.location.hash.replace('#','');
     if (['dashboard','medias','settings'].includes(hash)) goTo(hash);
-    // Quota error check
     if (window.location.search.includes('error=files')) {
       showToast('Nombre maximum de fichiers atteint -- augmentez votre licence');
       history.replaceState(null, '', '/');
