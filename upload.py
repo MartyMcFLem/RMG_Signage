@@ -935,12 +935,13 @@ def play_single_file(filename):
         return jsonify({"success": False, "message": "Fichier introuvable"}), 404
     config['single_file_mode'] = True
     config['selected_file'] = filename
+    config['active_playlist'] = None  # Desactiver toute playlist
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
     except:
         pass
-    update_mpv_playlist()
+    restart_mpv()
     return jsonify({"success": True, "message": f"Affichage de {filename} uniquement"})
 
 
@@ -949,6 +950,7 @@ def play_all_files():
     global config
     config['single_file_mode'] = False
     config['selected_file'] = None
+    config['active_playlist'] = None  # Desactiver toute playlist
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
@@ -1001,6 +1003,8 @@ def deactivate_playlist():
     """Desactive la playlist, revient a la lecture de tous les fichiers"""
     global config
     config['active_playlist'] = None
+    config['single_file_mode'] = False
+    config['selected_file'] = None
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
@@ -1344,8 +1348,7 @@ def start_mpv(override_cmd=None, boot_delay=True):
 def restart_mpv(override_cmd=None):
     """Redémarre MPV (protégé par verrou pour éviter les lancements multiples)"""
     global mpv_process
-    if not _mpv_lock.acquire(blocking=False):
-        # Un redémarrage est déjà en cours
+    if not _mpv_lock.acquire(timeout=5):
         return
     try:
         # Blackout tty1 AVANT de tuer mpv : quand mpv libère le DRM, la VT
