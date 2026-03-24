@@ -132,20 +132,44 @@ mkdir -p "$(dirname "$MEDIA_IMG")"
 mkdir -p "$MEDIA_DIR"
 
 # Déterminer le quota média
-# Priorité : argument --media-quota > licence existante > défaut (4096 MB = 4 Go)
-DEFAULT_QUOTA_MB=4096
+# Stratégie : réserver 10 Go (10240 MB) pour l'OS, le reste pour les médias.
+# Le quota final est le minimum entre (espace dispo - 10 Go) et le quota licence.
+OS_RESERVED_MB=10240  # 10 Go réservés pour l'OS
+
+# Calculer l'espace disque total de la partition racine
+ROOT_TOTAL_MB=$(df -BM / --output=size | tail -1 | tr -d ' M')
+ROOT_AVAIL_FOR_MEDIA=$((ROOT_TOTAL_MB - OS_RESERVED_MB))
+if [ "$ROOT_AVAIL_FOR_MEDIA" -lt 512 ]; then
+  ROOT_AVAIL_FOR_MEDIA=512  # minimum 512 MB même sur petit disque
+fi
+echo "  → Disque racine : ${ROOT_TOTAL_MB} MB total, ${OS_RESERVED_MB} MB réservés OS"
+echo "  → Espace max pour médias : ${ROOT_AVAIL_FOR_MEDIA} MB"
+
+# Priorité quota : --media-quota > licence existante > calcul auto
+DEFAULT_QUOTA_MB="$ROOT_AVAIL_FOR_MEDIA"
 if [ -n "$MEDIA_QUOTA_MB" ]; then
   QUOTA_MB="$MEDIA_QUOTA_MB"
 elif [ -f "$LICENSE_FILE" ]; then
-  QUOTA_MB=$(python3 -c "import json; print(json.load(open('$LICENSE_FILE')).get('media_quota_mb', $DEFAULT_QUOTA_MB))" 2>/dev/null || echo "$DEFAULT_QUOTA_MB")
+  LICENSE_QUOTA=$(python3 -c "import json; print(json.load(open('$LICENSE_FILE')).get('media_quota_mb', 0))" 2>/dev/null || echo "0")
+  if [ "$LICENSE_QUOTA" -gt 0 ] 2>/dev/null; then
+    QUOTA_MB="$LICENSE_QUOTA"
+  else
+    QUOTA_MB="$DEFAULT_QUOTA_MB"
+  fi
 else
   QUOTA_MB="$DEFAULT_QUOTA_MB"
 fi
 
+# Plafonner au maximum physique disponible
+if [ "$QUOTA_MB" -gt "$ROOT_AVAIL_FOR_MEDIA" ]; then
+  echo "  ⚠️  Quota demandé (${QUOTA_MB} MB) dépasse l'espace disponible, plafonné à ${ROOT_AVAIL_FOR_MEDIA} MB"
+  QUOTA_MB="$ROOT_AVAIL_FOR_MEDIA"
+fi
+
 # Valider que le quota est un nombre > 0
 if ! [[ "$QUOTA_MB" =~ ^[0-9]+$ ]] || [ "$QUOTA_MB" -lt 64 ]; then
-  echo "  ⚠️  Quota invalide ($QUOTA_MB MB), utilisation du défaut ($DEFAULT_QUOTA_MB MB)"
-  QUOTA_MB="$DEFAULT_QUOTA_MB"
+  echo "  ⚠️  Quota invalide ($QUOTA_MB MB), utilisation de 4096 MB"
+  QUOTA_MB=4096
 fi
 
 # Créer/mettre à jour le fichier de licence

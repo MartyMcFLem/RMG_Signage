@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Digital Signage</title>
+  <title>RMG Signage</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -13,95 +13,164 @@
       --border:  #e4e6ea;
       --text:    #1c1e21;
       --text-2:  #65676b;
+      --text-3:  #9ca3af;
       --blue:    #1877f2;
       --blue-h:  #166fe5;
-      --green:   #42b883;
+      --green:   #22c55e;
       --red:     #fa3e3e;
+      --orange:  #f97316;
       --purple:  #7c5cbf;
-      --radius:  14px;
-      --shadow:  0 2px 12px rgba(0,0,0,.08);
-      /* pill (durée) colours */
-      --pill-bg: rgba(0,0,0,0.32);
-      --pill-border: rgba(0,0,0,0.18);
-      --pill-color: #ffffff;
+      --radius:  12px;
+      --shadow:  0 1px 8px rgba(0,0,0,.06);
+      --nav-w:   220px;
     }
 
-    /* Dark mode variables */
     .dark {
-      --bg:      #0b0f12;
-      --surface: #0f1720;
-      --border:  #1f2933;
-      --text:    #e6eef8;
-      --text-2:  #9aa4b2;
+      --bg:      #0b0f14;
+      --surface: #111827;
+      --border:  #1f2937;
+      --text:    #f3f4f6;
+      --text-2:  #9ca3af;
+      --text-3:  #6b7280;
       --blue:    #3b82f6;
       --blue-h:  #2563eb;
       --green:   #34d399;
       --red:     #fb7185;
-      --purple:  #8b5cf6;
-      --radius:  14px;
-      --shadow:  0 2px 12px rgba(0,0,0,.5);
-      --pill-bg: rgba(255,255,255,0.06);
-      --pill-border: rgba(255,255,255,0.08);
-      --pill-color: var(--text);
+      --orange:  #fb923c;
+      --purple:  #a78bfa;
+      --shadow:  0 1px 8px rgba(0,0,0,.3);
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
+      display: flex;
     }
 
-    /* ── Header ──────────────────────────────────────── */
-    .header {
+    /* ── Sidebar nav ─────────────────────────────────── */
+    .sidebar-nav {
+      width: var(--nav-w);
       background: var(--surface);
+      border-right: 1px solid var(--border);
+      min-height: 100vh;
+      position: fixed;
+      top: 0; left: 0;
+      display: flex;
+      flex-direction: column;
+      z-index: 200;
+      transition: transform .3s;
+    }
+    .nav-brand {
+      padding: 20px 18px 16px;
       border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      height: 56px;
       display: flex;
       align-items: center;
       gap: 10px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
     }
-    .header-icon {
+    .nav-brand img {
       width: 32px; height: 32px;
-      background: transparent;
+      border-radius: 8px; object-fit: cover;
+    }
+    .nav-brand-text {
+      font-size: 15px; font-weight: 700;
+      letter-spacing: -.3px;
+    }
+    .nav-brand-sub {
+      font-size: 10px; color: var(--text-3);
+      margin-top: 1px;
+    }
+    .nav-links {
+      flex: 1;
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
       border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 17px;
-    }
-    .header-title {
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: -0.2px;
-    }
-    .header-count {
-      margin-left: auto;
-      font-size: 13px;
+      font-size: 13.5px;
+      font-weight: 500;
       color: var(--text-2);
-      background: var(--bg);
-      padding: 4px 10px;
-      border-radius: 20px;
-      border: 1px solid var(--border);
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      transition: background .15s, color .15s;
     }
+    .nav-link:hover { background: var(--bg); color: var(--text); }
+    .nav-link.active { background: var(--blue); color: #fff; }
+    .nav-link.active:hover { background: var(--blue-h); }
+    .nav-link svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .nav-footer {
+      padding: 14px 18px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-3);
+    }
+    .nav-serial { font-family: monospace; font-size: 10px; word-break: break-all; }
 
-    /* ── Page layout ─────────────────────────────────── */
-    .page {
-      max-width: 1160px;
-      margin: 0 auto;
-      padding: 24px 16px;
-      display: grid;
-      grid-template-columns: 300px 1fr;
-      gap: 20px;
-      align-items: start;
+    /* ── Mobile hamburger ─────────────────────────────── */
+    .hamburger {
+      display: none;
+      position: fixed;
+      top: 12px; left: 12px;
+      z-index: 300;
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: var(--shadow);
+    }
+    .nav-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 199;
     }
     @media (max-width: 800px) {
-      .page { grid-template-columns: 1fr; }
+      .sidebar-nav { transform: translateX(-100%); }
+      .sidebar-nav.open { transform: translateX(0); }
+      .hamburger { display: flex; }
+      .nav-overlay.open { display: block; }
+      .main-content { margin-left: 0 !important; }
     }
-    .sidebar { display: flex; flex-direction: column; gap: 16px; }
-    .main    { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Main content ─────────────────────────────────── */
+    .main-content {
+      margin-left: var(--nav-w);
+      flex: 1;
+      padding: 28px 32px;
+      max-width: 1100px;
+    }
+    @media (max-width: 800px) {
+      .main-content { padding: 60px 14px 20px; }
+    }
+
+    /* ── Page header ──────────────────────────────────── */
+    .page-head {
+      margin-bottom: 24px;
+    }
+    .page-head h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -.3px;
+    }
+    .page-head p {
+      font-size: 13px;
+      color: var(--text-2);
+      margin-top: 4px;
+    }
 
     /* ── Cards ───────────────────────────────────────── */
     .card {
@@ -109,7 +178,7 @@
       border-radius: var(--radius);
       border: 1px solid var(--border);
       box-shadow: var(--shadow);
-      overflow: hidden;
+      margin-bottom: 20px;
     }
     .card-head {
       padding: 14px 18px 12px;
@@ -120,237 +189,126 @@
       gap: 8px;
     }
     .card-head h2 {
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .6px;
+      font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .6px;
       color: var(--text-2);
     }
     .card-body { padding: 18px; }
 
-    /* Collapsible card body */
-    .card-body-collapsible {
+    /* ── Dashboard grid ──────────────────────────────── */
+    .dash-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
       padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .stat-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .5px;
+      color: var(--text-3);
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-size: 28px; font-weight: 700;
+      letter-spacing: -.5px;
+      line-height: 1.1;
+    }
+    .stat-sub {
+      font-size: 12px; color: var(--text-2);
+      margin-top: 4px;
+    }
+
+    /* ── Storage bar ──────────────────────────────────── */
+    .storage-label {
+      display: flex; justify-content: space-between;
+      font-size: 12px; color: var(--text-2);
+      margin-bottom: 6px;
+    }
+    .storage-bar {
+      height: 10px;
+      background: var(--bg);
+      border-radius: 5px;
       overflow: hidden;
-      max-height: 1000px;
-      transition: max-height .35s ease, padding .35s ease;
+      border: 1px solid var(--border);
     }
-    .card-body-collapsible.collapsed {
-      max-height: 0;
-      padding-top: 0;
-      padding-bottom: 0;
+    .storage-fill {
+      height: 100%;
+      border-radius: 5px;
+      transition: width .5s ease;
+      background: var(--blue);
     }
+    .storage-fill.warn { background: var(--orange); }
+    .storage-fill.crit { background: var(--red); }
 
-    /* Arrow toggle */
-    .card-head-btn {
-      background: none; border: none; cursor: pointer;
-      color: var(--text-2); padding: 2px 4px;
-      display: flex; align-items: center;
-      transition: color .2s;
+    /* ── Status dot ──────────────────────────────────── */
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
     }
-    .card-head-btn:hover { color: var(--text); }
-    .card-head-btn .chevron {
-      display: inline-flex;
-      align-items: center;
-      transition: transform .3s ease;
-    }
-    .card-head-btn.collapsed .chevron { transform: rotate(-180deg); }
+    .status-dot.on  { background: var(--green); animation: pulse 2s infinite; }
+    .status-dot.off { background: var(--red); }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
 
-    /* ── Upload zone ─────────────────────────────────── */
+    /* ── Buttons ──────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 9px 16px;
+      border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer;
+      transition: filter .15s, transform .1s;
+    }
+    .btn:hover  { filter: brightness(.93); }
+    .btn:active { transform: scale(.97); }
+    .btn-blue   { background: var(--blue);  color: #fff; }
+    .btn-green  { background: var(--green); color: #fff; }
+    .btn-red    { background: var(--red);   color: #fff; }
+    .btn-ghost  { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-purple { background: var(--purple); color: #fff; }
+    .btn-sm     { padding: 6px 12px; font-size: 12px; }
+    .btn-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .btn-full   { grid-column: span 2; }
+
+    /* ── Upload zone ──────────────────────────────────── */
     .upload-zone {
       border: 2px dashed var(--border);
       border-radius: 10px;
-      padding: 28px 16px;
+      padding: 32px 16px;
       text-align: center;
       cursor: pointer;
       transition: border-color .2s, background .2s;
+      margin-bottom: 18px;
     }
-    .upload-zone:hover,
-    .upload-zone.drag-on {
+    .upload-zone:hover, .upload-zone.drag-on {
       border-color: var(--blue);
-      background: #f0f5ff;
+      background: rgba(24,119,242,.04);
     }
-    .upload-zone .uz-icon { font-size: 30px; margin-bottom: 8px; }
     .upload-zone p { font-size: 13px; color: var(--text-2); line-height: 1.6; }
-    .upload-zone .uz-btn {
-      display: inline-block;
-      margin-top: 10px;
-      background: var(--blue);
-      color: #fff;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 7px 18px;
-      border-radius: 20px;
-    }
-    .upload-zone .uz-btn:hover { background: var(--blue-h); }
     .upload-progress {
-      margin-top: 10px;
-      height: 4px;
-      background: var(--border);
-      border-radius: 4px;
-      overflow: hidden;
-      display: none;
+      height: 4px; background: var(--border);
+      border-radius: 4px; overflow: hidden;
+      display: none; margin-bottom: 12px;
     }
     .upload-progress-bar {
-      height: 100%;
-      background: var(--blue);
-      animation: indeterminate 1.2s infinite;
+      height: 100%; background: var(--blue);
+      animation: progress-ind 1.2s infinite;
     }
-    @keyframes indeterminate {
+    @keyframes progress-ind {
       0%   { transform: translateX(-100%); width: 50%; }
       100% { transform: translateX(300%);  width: 50%; }
     }
     #fileInput { display: none; }
 
-    /* ── MPV status bar ─────────────────────────────── */
-    .mpv-status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 9px 13px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 14px;
-      border: 1px solid;
-    }
-    .mpv-status.ok   { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
-    .mpv-status.warn { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
-    .mpv-status.err  { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-    .mpv-status .dot {
-      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-    }
-    .ok   .dot { background: #22c55e; animation: pulse 2s infinite; }
-    .warn .dot { background: #f97316; }
-    .err  .dot { background: var(--red); }
-
-    /* ── Now playing ─────────────────────────────────── */
-    .now-playing {
-      display: none;
-      background: #f0f5ff;
-      border: 1px solid #c8d8f8;
-      border-radius: 8px;
-      padding: 10px 13px;
-      font-size: 13px;
-      color: var(--blue);
-      margin-bottom: 14px;
-      align-items: center;
-      gap: 8px;
-    }
-    .now-playing.show { display: flex; }
-    .np-dot {
-      width: 8px; height: 8px;
-      background: var(--green);
-      border-radius: 50%;
-      flex-shrink: 0;
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
-
-    /* ── Controls ────────────────────────────────────── */
-    .ctrl-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-    .ctrl-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      padding: 11px 10px;
-      border: none;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: filter .15s, transform .1s;
-    }
-    .ctrl-btn:hover  { filter: brightness(.93); }
-    .ctrl-btn:active { transform: scale(.97); }
-    .ctrl-restart { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
-    .ctrl-next    { background: var(--blue);  color: #fff; grid-column: span 2; }
-    .ctrl-stop    { background: var(--red);   color: #fff; }
-    .ctrl-all     { background: var(--green); color: #fff; grid-column: span 2; }
-    .ctrl-ip      { background: var(--purple); color: #fff; grid-column: span 2; }
-
-    /* ── Settings ────────────────────────────────────── */
-    .setting-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 13px 0;
-      border-bottom: 1px solid var(--border);
-      gap: 12px;
-    }
-    .setting-label { color: var(--text); }
-    .setting-row:last-child  { border-bottom: none; padding-bottom: 0; }
-    .setting-row:first-child { padding-top: 0; }
-    .setting-label { font-size: 14px; font-weight: 500; }
-    .setting-hint  { font-size: 11px; color: var(--text-2); margin-top: 2px; }
-    .num-input {
-      width: 68px;
-      padding: 7px 10px;
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      text-align: center;
-      background: var(--surface);
-      color: var(--text);
-      transition: border-color .2s, box-shadow .15s;
-    }
-    .num-input:focus { outline: none; border-color: var(--blue); background: var(--surface); color: var(--text); }
-
-    /* Rotation select */
-    .rot-select {
-      padding: 7px 10px;
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      background: var(--surface);
-      color: var(--text);
-      cursor: pointer;
-      transition: border-color .2s;
-    }
-    .rot-select:focus { outline: none; border-color: var(--blue); }
-
-    /* iOS-style toggle */
-    .tog { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
-    .tog input { display: none; }
-    .tog-track {
-      position: absolute; inset: 0;
-      background: #ccc;
-      border-radius: 26px;
-      cursor: pointer;
-      transition: background .25s;
-    }
-    .tog-track::after {
-      content: '';
-      position: absolute;
-      width: 22px; height: 22px;
-      background: #fff;
-      border-radius: 50%;
-      top: 2px; left: 2px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.25);
-      transition: transform .25s;
-    }
-    .tog input:checked + .tog-track { background: var(--green); }
-    .tog input:checked + .tog-track::after { transform: translateX(18px); }
-
-    /* ── Info notes ──────────────────────────────────── */
-    .note {
-      padding: 9px 12px;
-      border-radius: 8px;
-      font-size: 12.5px;
-      line-height: 1.5;
-      margin-bottom: 14px;
-    }
-    .note-warn { background: #fff8e6; color: #7a5200; border: 1px solid #f5d67a; }
-    .note-info { background: #eef4ff; color: #2255c4; border: 1px solid #c0d4f8; }
-
-    /* ── Gallery ─────────────────────────────────────── */
+    /* ── Gallery ──────────────────────────────────────── */
     .gallery {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
@@ -362,35 +320,23 @@
       background: var(--bg);
       border: 2px solid transparent;
       transition: box-shadow .2s, border-color .2s, transform .15s;
-      display: flex;
-      flex-direction: column;
+      display: flex; flex-direction: column;
     }
     .gallery-item:hover      { box-shadow: 0 6px 20px rgba(0,0,0,.12); }
     .gallery-item.selected   { border-color: var(--blue); }
     .gallery-item.draggable  { cursor: grab; }
     .gallery-item.dragging   { opacity: .35; transform: scale(.95); cursor: grabbing; }
-    .gallery-item.drag-over  {
-      border-color: var(--blue);
-      transform: scale(1.04);
-      box-shadow: 0 0 0 3px rgba(24,119,242,.25);
-    }
-
-    /* Image wrapper — clips uniquement les coins du haut */
+    .gallery-item.drag-over  { border-color: var(--blue); transform: scale(1.04); }
     .img-wrap {
-      position: relative;
-      flex: 1;
-      overflow: hidden;
+      position: relative; flex: 1; overflow: hidden;
       border-radius: 8px 8px 0 0;
-      min-height: 0;
-      aspect-ratio: 1;
+      min-height: 0; aspect-ratio: 1;
     }
     .gallery-item img {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
       object-fit: cover; display: block;
     }
-
-    /* Hover overlay */
     .item-overlay {
       position: absolute; inset: 0;
       background: transparent;
@@ -398,17 +344,12 @@
       display: flex; flex-direction: column; justify-content: space-between;
     }
     .img-wrap:hover .item-overlay { background: rgba(0,0,0,.28); }
-
     .item-actions {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      padding: 7px;
-      opacity: 0;
-      transition: opacity .2s;
+      display: flex; justify-content: space-between;
+      align-items: flex-start; padding: 7px;
+      opacity: 0; transition: opacity .2s;
     }
     .gallery-item:hover .item-actions { opacity: 1; }
-
     .ia-btn {
       width: 30px; height: 30px;
       border: none; border-radius: 50%;
@@ -420,7 +361,6 @@
     .ia-btn:hover { transform: scale(1.12); }
     .ia-play { background: rgba(255,255,255,.92); color: var(--blue); }
     .ia-del  { background: rgba(250,62,62,.88);   color: #fff; }
-
     .drag-pip {
       position: absolute; top: 7px; left: 50%;
       transform: translateX(-50%);
@@ -431,12 +371,9 @@
       opacity: 0; transition: opacity .2s;
     }
     .img-wrap:hover .drag-pip { opacity: 1; }
-
-    /* Bottom info bar */
     .item-foot {
-      padding: 0 8px;
-      height: 28px;
-      background: rgba(8, 8, 10, 0.92);
+      padding: 0 8px; height: 28px;
+      background: rgba(8,8,10,.92);
       border-top: 1px solid rgba(255,255,255,.07);
       border-radius: 0 0 8px 8px;
       display: flex; align-items: center; gap: 5px;
@@ -444,134 +381,251 @@
     }
     .item-name {
       font-size: 10px; color: rgba(255,255,255,.80);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
-      min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      flex: 1; min-width: 0;
     }
     .type-badge {
       font-size: 9px; font-weight: 700;
       padding: 1px 5px; border-radius: 3px;
-      letter-spacing: .4px; white-space: nowrap;
-      flex-shrink: 0;
+      letter-spacing: .4px; white-space: nowrap; flex-shrink: 0;
     }
     .badge-video { background: var(--purple); color: #fff; }
-    .badge-gif   { background: #f97316;       color: #fff; }
+    .badge-gif   { background: var(--orange); color: #fff; }
     .badge-img   { background: #0ea5e9;       color: #fff; }
-    .dur-pill {
-      display: flex; align-items: center; gap: 2px;
-      flex-shrink: 0;
-    }
+    .dur-pill { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
     .dur-pill input {
       width: 28px;
       background: rgba(255,255,255,.12);
       border: none; border-radius: 4px;
       color: rgba(255,255,255,.90); font-size: 11px; font-weight: 700;
-      text-align: center; padding: 2px 2px;
+      text-align: center; padding: 2px;
     }
     .dur-pill input:focus { outline: none; background: rgba(255,255,255,.20); }
     .dur-pill input::placeholder { color: rgba(255,255,255,.45); }
     .dur-pill span { font-size: 10px; color: rgba(255,255,255,.55); }
 
-    /* ── Update card ─────────────────────────────────── */
-    .git-info {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 8px 12px;
-      margin-bottom: 12px;
-    }
-    .update-output {
-      display: none;
-      margin-top: 10px;
-      padding: 8px 10px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-family: monospace;
-      font-size: 11px;
-      color: var(--text-2);
-      white-space: pre-wrap;
-      word-break: break-all;
-      line-height: 1.6;
-    }
-    .update-output.show { display: block; }
-    .ctrl-update { background: var(--blue); color: #fff; grid-column: span 2; }
-
-    /* ── Storage bar ──────────────────────────────────── */
-    .storage-bar-wrap {
-      margin-bottom: 14px;
-    }
-    .storage-label {
-      display: flex;
+    /* ── Settings rows ────────────────────────────────── */
+    .setting-row {
+      display: flex; align-items: center;
       justify-content: space-between;
-      font-size: 12px;
-      color: var(--text-2);
-      margin-bottom: 5px;
+      padding: 13px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
     }
-    .storage-bar {
-      height: 8px;
-      background: var(--bg);
-      border-radius: 4px;
-      overflow: hidden;
-      border: 1px solid var(--border);
+    .setting-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .setting-row:first-child { padding-top: 0; }
+    .setting-label { font-size: 14px; font-weight: 500; }
+    .setting-hint  { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+    .num-input {
+      width: 68px; padding: 7px 10px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 14px; font-weight: 600; text-align: center;
+      background: var(--surface); color: var(--text);
     }
-    .storage-bar-fill {
-      height: 100%;
-      border-radius: 4px;
-      transition: width .4s ease, background .3s;
-      background: var(--blue);
+    .num-input:focus { outline: none; border-color: var(--blue); }
+    .rot-select {
+      padding: 7px 10px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 14px; font-weight: 600;
+      background: var(--surface); color: var(--text); cursor: pointer;
     }
-    .storage-bar-fill.warn { background: #f97316; }
-    .storage-bar-fill.crit { background: var(--red); }
-    .storage-tier {
-      font-size: 11px;
-      color: var(--text-2);
-      margin-top: 4px;
+    .rot-select:focus { outline: none; border-color: var(--blue); }
+    /* iOS toggle */
+    .tog { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+    .tog input { display: none; }
+    .tog-track {
+      position: absolute; inset: 0;
+      background: #ccc; border-radius: 26px;
+      cursor: pointer; transition: background .25s;
     }
+    .tog-track::after {
+      content: ''; position: absolute;
+      width: 22px; height: 22px;
+      background: #fff; border-radius: 50%;
+      top: 2px; left: 2px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.25);
+      transition: transform .25s;
+    }
+    .tog input:checked + .tog-track { background: var(--green); }
+    .tog input:checked + .tog-track::after { transform: translateX(18px); }
 
-    /* ── Toast ───────────────────────────────────────── */
+    /* ── License card ─────────────────────────────────── */
+    .license-input-row {
+      display: flex; gap: 8px; margin-top: 12px;
+    }
+    .license-input {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 14px; font-weight: 600; font-family: monospace;
+      text-transform: uppercase; letter-spacing: 1px;
+      background: var(--surface); color: var(--text);
+    }
+    .license-input:focus { outline: none; border-color: var(--blue); }
+    .license-badge {
+      display: inline-block;
+      padding: 3px 10px; border-radius: 5px;
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px;
+    }
+    .badge-none         { background: var(--bg);  color: var(--text-3); border: 1px solid var(--border); }
+    .badge-starter      { background: #dbeafe; color: #1d4ed8; }
+    .badge-standard     { background: #d1fae5; color: #065f46; }
+    .badge-professional { background: #ede9fe; color: #5b21b6; }
+    .badge-enterprise   { background: #fef3c7; color: #92400e; }
+    .badge-unlimited    { background: #1c1e21; color: #fff; }
+
+    /* ── Notes ────────────────────────────────────────── */
+    .note {
+      padding: 9px 12px; border-radius: 8px;
+      font-size: 12.5px; line-height: 1.5; margin-bottom: 14px;
+    }
+    .note-warn { background: #fff8e6; color: #7a5200; border: 1px solid #f5d67a; }
+    .note-info { background: #eef4ff; color: #2255c4; border: 1px solid #c0d4f8; }
+
+    /* ── Git update ───────────────────────────────────── */
+    .git-badge {
+      display: inline-block;
+      font-size: 11px; font-weight: 700;
+      padding: 4px 12px; border-radius: 5px;
+      white-space: nowrap;
+    }
+    .git-uptodate { background: var(--green); color: #fff; }
+    .git-outdated { background: var(--orange); color: #fff; }
+
+    /* ── Toast ────────────────────────────────────────── */
     .toast {
       position: fixed;
       bottom: 24px; right: 24px;
-      background: #1c1e21;
-      color: #fff;
+      background: #1c1e21; color: #fff;
       font-size: 13px; font-weight: 500;
-      padding: 11px 16px;
-      border-radius: 10px;
+      padding: 11px 16px; border-radius: 10px;
       box-shadow: 0 4px 20px rgba(0,0,0,.3);
       transform: translateY(70px); opacity: 0;
       transition: transform .3s cubic-bezier(.34,1.56,.64,1), opacity .3s;
-      pointer-events: none; z-index: 999; max-width: 280px;
+      pointer-events: none; z-index: 999; max-width: 320px;
     }
     .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── Page visibility ──────────────────────────────── */
+    .page-section { display: none; }
+    .page-section.active { display: block; }
   </style>
 </head>
 <body>
 
-  <header class="header">
-    <div class="header-icon">
-      <img id="siteLogo" src="/static/logo.png" alt="Logo"
-           style="width:32px;height:32px;border-radius:8px;object-fit:cover;display:block"
-           onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'">
-      <div id="logoFallback" style="display:none">🖼</div>
+  <!-- Mobile hamburger -->
+  <button class="hamburger" id="hamburger" onclick="toggleNav()">&#9776;</button>
+  <div class="nav-overlay" id="navOverlay" onclick="toggleNav()"></div>
+
+  <!-- ── Sidebar Navigation ───────────────────────────── -->
+  <nav class="sidebar-nav" id="sidebarNav">
+    <div class="nav-brand">
+      <img id="siteLogo" src="/static/logo.png" alt=""
+           onerror="this.style.display='none'">
+      <div>
+        <div class="nav-brand-text">RMG Signage</div>
+        <div class="nav-brand-sub" id="navSerial">--</div>
+      </div>
     </div>
-    <span class="header-title">Digital Signage Platform</span>
-    <span class="header-count" id="headerCount">0 média</span>
-  </header>
+    <div class="nav-links">
+      <button class="nav-link active" data-page="dashboard" onclick="goTo('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-link" data-page="medias" onclick="goTo('medias')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+        Medias
+      </button>
+      <button class="nav-link" data-page="settings" onclick="goTo('settings')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Parametres
+      </button>
+    </div>
+    <div class="nav-footer">
+      <div id="navVersion" style="margin-bottom:4px">--</div>
+      <div class="nav-serial" id="navSerialFull">--</div>
+    </div>
+  </nav>
 
-  <div class="page">
+  <!-- ── Main Content ─────────────────────────────────── -->
+  <div class="main-content">
 
-    <!-- ── Sidebar ────────────────────────────────────── -->
-    <aside class="sidebar">
+    <!-- ═══════════ DASHBOARD ═══════════ -->
+    <section class="page-section active" id="page-dashboard">
+      <div class="page-head">
+        <h1>Dashboard</h1>
+        <p>Vue d'ensemble de votre systeme d'affichage</p>
+      </div>
+
+      <div class="dash-grid">
+        <div class="stat-card">
+          <div class="stat-label">Statut lecteur</div>
+          <div class="stat-value" id="dashMpvStatus">--</div>
+          <div class="stat-sub" id="dashMpvSub"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Medias</div>
+          <div class="stat-value" id="dashMediaCount">0</div>
+          <div class="stat-sub" id="dashMediaSub">fichiers</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Licence</div>
+          <div class="stat-value" id="dashLicense">--</div>
+          <div class="stat-sub" id="dashLicenseSub"></div>
+        </div>
+      </div>
+
+      <!-- Storage -->
+      <div class="card">
+        <div class="card-head"><h2>Stockage</h2></div>
+        <div class="card-body">
+          <div class="storage-label">
+            <span id="storageUsed">--</span>
+            <span id="storageTotal">--</span>
+          </div>
+          <div class="storage-bar">
+            <div class="storage-fill" id="storageFill" style="width:0%"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:6px" id="storagePct"></div>
+        </div>
+      </div>
+
+      <!-- Playback controls -->
+      <div class="card">
+        <div class="card-head"><h2>Controle de lecture</h2></div>
+        <div class="card-body">
+          <div class="now-playing" id="nowPlaying" style="display:none;margin-bottom:14px;padding:10px 13px;border-radius:8px;background:#eef4ff;border:1px solid #c0d4f8;font-size:13px;color:var(--blue);align-items:center;gap:8px">
+            <span class="status-dot on"></span>
+            <span>En cours : <strong id="nowPlayingName"></strong></span>
+          </div>
+          <div class="btn-grid">
+            <button class="btn btn-ghost" onclick="control('restart')">Redemarrer</button>
+            <button class="btn btn-red btn-sm" onclick="control('stop')">Arreter</button>
+            <button class="btn btn-blue btn-full" onclick="control('next')">Fichier suivant</button>
+            <button class="btn btn-purple btn-full" onclick="control('show-ip')">Afficher IP</button>
+            <button class="btn btn-green btn-full" id="playAllBtn" style="display:none" onclick="playAll()">Tous les medias</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ MEDIAS ═══════════ -->
+    <section class="page-section" id="page-medias">
+      <div class="page-head">
+        <h1>Mediatheque</h1>
+        <p><span id="galleryCount">0 fichier</span></p>
+      </div>
 
       <!-- Upload -->
       <div class="card">
-        <div class="card-head"><h2>Ajouter des médias</h2></div>
+        <div class="card-head"><h2>Ajouter des medias</h2></div>
         <div class="card-body">
           <div class="upload-zone" id="uploadZone"
                onclick="document.getElementById('fileInput').click()">
-            <div class="uz-icon">☁️</div>
-            <p>Glissez vos photos &amp; vidéos ici<br>ou cliquez pour choisir</p>
-            <span class="uz-btn">Parcourir…</span>
+            <p style="font-size:28px;margin-bottom:8px">&#9729;</p>
+            <p>Glissez vos photos &amp; videos ici<br>ou cliquez pour choisir</p>
+            <span class="btn btn-blue btn-sm" style="margin-top:10px">Parcourir...</span>
           </div>
           <div class="upload-progress" id="uploadProgress">
             <div class="upload-progress-bar"></div>
@@ -580,160 +634,126 @@
         </div>
       </div>
 
-      <!-- Stockage -->
-      <div class="card">
-        <div class="card-head"><h2>Stockage</h2></div>
-        <div class="card-body">
-          <div class="storage-bar-wrap" id="storageWidget">
-            <div class="storage-label">
-              <span id="storageUsed">--</span>
-              <span id="storageTotal">--</span>
-            </div>
-            <div class="storage-bar">
-              <div class="storage-bar-fill" id="storageBarFill" style="width:0%"></div>
-            </div>
-            <div class="storage-tier" id="storageTier"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Lecture -->
-      <div class="card">
-        <div class="card-head"><h2>Lecture</h2></div>
-        <div class="card-body">
-          <div class="mpv-status warn" id="mpvStatus">
-            <span class="dot"></span>
-            <span id="mpvStatusText"></span>
-          </div>
-          <div class="now-playing" id="nowPlaying">
-            <span class="np-dot"></span>
-            <span>En cours d'affichage : <strong id="nowPlayingName"></strong></span>
-          </div>
-          <div class="ctrl-grid">
-            <button class="ctrl-btn ctrl-restart" onclick="control('restart')">↻ Redémarrer</button>
-            <button class="ctrl-btn ctrl-stop"    onclick="control('stop')">⏹ Arrêter</button>
-            <button class="ctrl-btn ctrl-next"    onclick="control('next')">⏭ Fichier suivant</button>
-            <button class="ctrl-btn ctrl-ip"      onclick="control('show-ip')">📡 Afficher IP</button>
-            <button class="ctrl-btn ctrl-all" id="playAllBtn" style="display:none"
-                    onclick="playAll()">▶ Tous les médias</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Paramètres -->
+      <!-- Gallery -->
       <div class="card">
         <div class="card-head">
-          <h2>Paramètres</h2>
-          <button class="card-head-btn collapsed" id="paramToggleBtn" onclick="toggleParams()" title="Réduire / Développer">
-            <i class="chevron"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></i>
-          </button>
-        </div>
-        <div class="card-body-collapsible collapsed" id="paramsBody">
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Durée par défaut</div>
-              <div class="setting-hint">Secondes par image</div>
-            </div>
-            <input type="number" class="num-input" id="duration" min="1" max="300"
-                   onchange="updateConfig()">
-          </div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Mode aléatoire</div>
-              <div class="setting-hint">Mélanger l'ordre</div>
-            </div>
-            <label class="tog">
-              <input type="checkbox" id="shuffle" onchange="updateConfig()">
-              <span class="tog-track"></span>
-            </label>
-          </div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Boucle infinie</div>
-              <div class="setting-hint">Recommencer en boucle</div>
-            </div>
-            <label class="tog">
-              <input type="checkbox" id="loop" onchange="updateConfig()">
-              <span class="tog-track"></span>
-            </label>
-          </div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Mode sombre</div>
-              <div class="setting-hint">Activer le thème sombre</div>
-            </div>
-            <label class="tog">
-              <input type="checkbox" id="darkMode" onchange="updateConfig()">
-              <span class="tog-track"></span>
-            </label>
-          </div>
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">Rotation affichage</div>
-              <div class="setting-hint">Rotation de l&rsquo;écran (sens horaire)</div>
-            </div>
-            <select class="rot-select" id="rotation" onchange="updateConfig()">
-              <option value="0">0° (normal)</option>
-              <option value="90">90°</option>
-              <option value="180">180° (inversé)</option>
-              <option value="270">270°</option>
-            </select>
-          </div>
-          <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:10px;">
-            <div>
-              <div class="setting-label">Logo</div>
-              <div class="setting-hint">Modifier le logo affiché en haut à gauche (512x512px recommandé)</div>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <img id="logoPreview" src="/static/logo.png" alt="Preview"
-                   style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:1px solid var(--border)"
-                   onerror="this.style.display='none'">
-              <input type="file" id="logoInput" accept="image/*" style="display:none"
-                     onchange="uploadLogo(this.files)">
-              <button class="ctrl-btn" onclick="var i=document.getElementById('logoInput');i.value='';i.click()">Changer</button>
-              <button class="ctrl-btn ctrl-restart" onclick="removeLogo()">Supprimer</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Mise à jour -->
-      <div class="card">
-        <div class="card-head"><h2>Mise à jour</h2></div>
-        <div class="card-body">
-          <div class="git-info" id="gitInfo">
-            <span style="color:var(--text-2);font-size:12px">Chargement…</span>
-          </div>
-          <div class="ctrl-grid">
-            <button class="ctrl-btn ctrl-update" id="updateBtn" onclick="runUpdate()">
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Mettre à jour
-            </button>
-          </div>
-        </div>
-      </div>
-
-    </aside>
-
-    <!-- ── Médiathèque ─────────────────────────────────── -->
-    <main class="main">
-      <div class="card">
-        <div class="card-head">
-          <h2>Médiathèque</h2>
-          <span style="font-size:12px; color:var(--text-2)" id="galleryCount">0 fichier</span>
+          <h2>Fichiers</h2>
+          <span style="font-size:12px;color:var(--text-2)" id="headerCount">0</span>
         </div>
         <div class="card-body">
           <div class="note note-warn" id="shuffleNote" style="display:none">
-            Mode aléatoire activé — désactivez-le dans les paramètres pour personnaliser
-            l'ordre par glisser-déposer.
+            Mode aleatoire active -- desactivez-le dans les parametres pour personnaliser l'ordre.
           </div>
           <div class="note note-info" id="orderNote" style="display:none">
-            Glissez-déposez les vignettes pour définir l'ordre de lecture.
-            Chaque image dispose d'un champ de durée individuel.
+            Glissez-deposez les vignettes pour definir l'ordre de lecture.
           </div>
           <div class="gallery" id="gallery"></div>
         </div>
       </div>
-    </main>
+    </section>
+
+    <!-- ═══════════ SETTINGS ═══════════ -->
+    <section class="page-section" id="page-settings">
+      <div class="page-head">
+        <h1>Parametres</h1>
+        <p>Configuration de l'affichage et du systeme</p>
+      </div>
+
+      <!-- Display settings -->
+      <div class="card">
+        <div class="card-head"><h2>Affichage</h2></div>
+        <div class="card-body">
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Duree par defaut</div>
+              <div class="setting-hint">Secondes par image</div>
+            </div>
+            <input type="number" class="num-input" id="duration" min="1" max="300" onchange="updateConfig()">
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Mode aleatoire</div>
+              <div class="setting-hint">Melanger l'ordre de lecture</div>
+            </div>
+            <label class="tog"><input type="checkbox" id="shuffle" onchange="updateConfig()"><span class="tog-track"></span></label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Boucle infinie</div>
+              <div class="setting-hint">Recommencer automatiquement</div>
+            </div>
+            <label class="tog"><input type="checkbox" id="loop" onchange="updateConfig()"><span class="tog-track"></span></label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Mode sombre</div>
+              <div class="setting-hint">Theme de l'interface</div>
+            </div>
+            <label class="tog"><input type="checkbox" id="darkMode" onchange="updateConfig()"><span class="tog-track"></span></label>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Rotation affichage</div>
+              <div class="setting-hint">Rotation de l'ecran</div>
+            </div>
+            <select class="rot-select" id="rotation" onchange="updateConfig()">
+              <option value="0">0° (normal)</option>
+              <option value="90">90°</option>
+              <option value="180">180° (inverse)</option>
+              <option value="270">270°</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logo -->
+      <div class="card">
+        <div class="card-head"><h2>Logo</h2></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:12px">
+            <img id="logoPreview" src="/static/logo.png" alt=""
+                 style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:1px solid var(--border)"
+                 onerror="this.style.display='none'">
+            <input type="file" id="logoInput" accept="image/*" style="display:none"
+                   onchange="uploadLogo(this.files)">
+            <button class="btn btn-ghost btn-sm" onclick="var i=document.getElementById('logoInput');i.value='';i.click()">Changer</button>
+            <button class="btn btn-ghost btn-sm" onclick="removeLogo()">Supprimer</button>
+          </div>
+          <div class="setting-hint" style="margin-top:8px">512x512px recommande</div>
+        </div>
+      </div>
+
+      <!-- License -->
+      <div class="card">
+        <div class="card-head"><h2>Licence</h2></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span>Niveau :</span>
+            <span class="license-badge" id="licenseBadge">--</span>
+            <span style="font-size:12px;color:var(--text-2)" id="licenseQuota"></span>
+          </div>
+          <div style="font-size:12px;color:var(--text-3)" id="licenseKeyPreview"></div>
+          <div class="license-input-row">
+            <input type="text" class="license-input" id="licenseKeyInput"
+                   placeholder="RMGS-XXXXX-XXXXX-XXXXX" maxlength="24"
+                   onkeydown="if(event.key==='Enter')activateLicense()">
+            <button class="btn btn-blue" onclick="activateLicense()">Activer</button>
+          </div>
+          <div class="setting-hint" style="margin-top:6px">Entrez votre cle de licence pour debloquer plus d'espace de stockage</div>
+        </div>
+      </div>
+
+      <!-- Update -->
+      <div class="card">
+        <div class="card-head"><h2>Mise a jour</h2></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span id="gitInfo"><span style="color:var(--text-2);font-size:12px">Chargement...</span></span>
+          </div>
+          <button class="btn btn-blue" id="updateBtn" onclick="runUpdate()">Mettre a jour</button>
+        </div>
+      </div>
+    </section>
 
   </div>
 
@@ -744,11 +764,31 @@
     let isDragging = false;
     let dragSrcEl  = null;
     let toastTimer = null;
+    let _currentPage = 'dashboard';
 
     const VIDEO_EXT = /\.(mp4|avi|mkv|mov|webm|m4v)$/i;
     const GIF_EXT   = /\.gif$/i;
     const isVideo = f => VIDEO_EXT.test(f);
     const isGif   = f => GIF_EXT.test(f);
+
+    // ── Navigation ────────────────────────────────────────
+    function goTo(page) {
+      _currentPage = page;
+      document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+      const sec = document.getElementById('page-' + page);
+      const link = document.querySelector(`.nav-link[data-page="${page}"]`);
+      if (sec) sec.classList.add('active');
+      if (link) link.classList.add('active');
+      window.location.hash = page;
+      // Close mobile nav
+      document.getElementById('sidebarNav').classList.remove('open');
+      document.getElementById('navOverlay').classList.remove('open');
+    }
+    function toggleNav() {
+      document.getElementById('sidebarNav').classList.toggle('open');
+      document.getElementById('navOverlay').classList.toggle('open');
+    }
 
     // ── Toast ─────────────────────────────────────────────
     function showToast(msg) {
@@ -756,94 +796,127 @@
       t.textContent = msg;
       t.classList.add('show');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+    }
+
+    // ── Dashboard ─────────────────────────────────────────
+    async function loadDashboard() {
+      try {
+        const [status, storage, lic] = await Promise.all([
+          fetch('/api/status').then(r => r.json()),
+          fetch('/api/storage').then(r => r.json()),
+          fetch('/api/license').then(r => r.json()),
+        ]);
+
+        // MPV status
+        const mpvEl = document.getElementById('dashMpvStatus');
+        const mpvSub = document.getElementById('dashMpvSub');
+        if (status.mpv_running) {
+          mpvEl.innerHTML = '<span class="status-dot on"></span>Actif';
+          mpvSub.textContent = status.media_count + ' medias charges';
+        } else {
+          mpvEl.innerHTML = '<span class="status-dot off"></span>Arrete';
+          mpvSub.textContent = '';
+        }
+
+        // Media count
+        document.getElementById('dashMediaCount').textContent = status.media_count;
+        document.getElementById('dashMediaSub').textContent = status.media_count > 1 ? 'fichiers' : 'fichier';
+
+        // License
+        const tier = lic.tier || 'none';
+        document.getElementById('dashLicense').textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
+        const qMb = lic.media_quota_mb || 0;
+        document.getElementById('dashLicenseSub').textContent = qMb >= 1024 ? (qMb/1024).toFixed(0) + ' Go alloues' : qMb + ' Mo alloues';
+
+        // Serial
+        if (status.serial) {
+          document.getElementById('navSerial').textContent = status.serial.replace('rmg-sign-','').substring(0,8) + '...';
+          document.getElementById('navSerialFull').textContent = status.serial;
+        }
+
+        // Storage
+        const used = storage.used_mb || 0;
+        const total = storage.total_mb || 1;
+        const pct = storage.usage_percent || 0;
+        document.getElementById('storageUsed').textContent = used >= 1024 ? (used/1024).toFixed(1)+' Go' : used+' Mo';
+        document.getElementById('storageTotal').textContent = total >= 1024 ? (total/1024).toFixed(1)+' Go' : total+' Mo';
+        document.getElementById('storagePct').textContent = pct + '% utilise';
+        const fill = document.getElementById('storageFill');
+        fill.style.width = Math.min(pct, 100) + '%';
+        fill.classList.remove('warn','crit');
+        if (pct >= 90) fill.classList.add('crit');
+        else if (pct >= 70) fill.classList.add('warn');
+      } catch(e) {}
     }
 
     // ── Config ────────────────────────────────────────────
     async function loadConfig() {
       const cfg = await fetch('/api/config').then(r => r.json());
-      document.getElementById('duration').value    = cfg.image_duration;
-      document.getElementById('shuffle').checked   = cfg.shuffle;
-      document.getElementById('loop').checked      = cfg.loop;
-      // dark mode
-      if (document.getElementById('darkMode')) {
-        document.getElementById('darkMode').checked = !!cfg.dark_mode;
-        applyDarkMode(!!cfg.dark_mode);
-      }
+      document.getElementById('duration').value  = cfg.image_duration;
+      document.getElementById('shuffle').checked = cfg.shuffle;
+      document.getElementById('loop').checked    = cfg.loop;
+      document.getElementById('darkMode').checked = !!cfg.dark_mode;
+      applyDarkMode(!!cfg.dark_mode);
       const rotEl = document.getElementById('rotation');
       if (rotEl) rotEl.value = String(cfg.rotation ?? 0);
       refreshNowPlaying(cfg);
-      // hide mpv status badge; confirmations use toasts
-      const mpv = document.getElementById('mpvStatus');
-      if (mpv) mpv.style.display = 'none';
     }
-
     function refreshNowPlaying(cfg) {
       const np = document.getElementById('nowPlaying');
       if (cfg.single_file_mode && cfg.selected_file) {
-        np.classList.add('show');
+        np.style.display = 'flex';
         document.getElementById('nowPlayingName').textContent = cfg.selected_file;
         document.getElementById('playAllBtn').style.display = 'block';
       } else {
-        np.classList.remove('show');
+        np.style.display = 'none';
         document.getElementById('playAllBtn').style.display = 'none';
       }
     }
-
     async function updateConfig() {
       const payload = {
         image_duration: parseInt(document.getElementById('duration').value),
         shuffle: document.getElementById('shuffle').checked,
         loop:    document.getElementById('loop').checked,
+        dark_mode: document.getElementById('darkMode').checked,
+        rotation: parseInt(document.getElementById('rotation').value),
       };
-      const darkModeEl = document.getElementById('darkMode');
-      if (darkModeEl) payload.dark_mode = darkModeEl.checked;
-      const rotEl = document.getElementById('rotation');
-      if (rotEl) payload.rotation = parseInt(rotEl.value);
       await fetch('/api/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type':'application/json'},
         body: JSON.stringify(payload),
       });
-      if (darkModeEl) applyDarkMode(darkModeEl.checked);
-      showToast('Paramètres enregistrés');
+      applyDarkMode(payload.dark_mode);
+      showToast('Parametres enregistres');
       loadConfig();
       loadGallery();
     }
-
-    function applyDarkMode(enabled) {
-      if (enabled) document.body.classList.add('dark');
-      else document.body.classList.remove('dark');
+    function applyDarkMode(on) {
+      document.body.classList.toggle('dark', on);
     }
 
     // ── Gallery ───────────────────────────────────────────
     async function loadGallery() {
       if (isDragging) return;
-
       const [files, cfg] = await Promise.all([
         fetch('/api/files').then(r => r.json()),
         fetch('/api/config').then(r => r.json()),
       ]);
-
-      // Sort by custom order
       let sorted = [...files];
       if (cfg.file_order && cfg.file_order.length) {
-        const om = Object.fromEntries(cfg.file_order.map((f, i) => [f, i]));
-        sorted.sort((a, b) => {
-          const ai = om[a] ?? 1e9;
-          const bi = om[b] ?? 1e9;
+        const om = Object.fromEntries(cfg.file_order.map((f,i)=>[f,i]));
+        sorted.sort((a,b) => {
+          const ai = om[a] ?? 1e9, bi = om[b] ?? 1e9;
           return ai !== bi ? ai - bi : a.localeCompare(b);
         });
       }
       _files = sorted;
-
       const n = files.length;
-      document.getElementById('headerCount').textContent  = n + ' média' + (n > 1 ? 's' : '');
-      document.getElementById('galleryCount').textContent = n + ' fichier' + (n > 1 ? 's' : '');
+      document.getElementById('galleryCount').textContent = n + ' fichier' + (n>1?'s':'');
+      document.getElementById('headerCount').textContent = n;
       document.getElementById('shuffleNote').style.display = cfg.shuffle ? 'block' : 'none';
-      document.getElementById('orderNote').style.display   = cfg.shuffle ? 'none'  : 'block';
+      document.getElementById('orderNote').style.display = cfg.shuffle ? 'none' : 'block';
       refreshNowPlaying(cfg);
-
       const draggable = !cfg.shuffle;
       document.getElementById('gallery').innerHTML = sorted.map((file, i) => {
         const sel       = cfg.single_file_mode && cfg.selected_file === file;
@@ -852,48 +925,31 @@
         const customDur = cfg.file_durations?.[file] ?? '';
         const defDur    = cfg.image_duration;
         const safeFile  = file.replace(/"/g, '&quot;');
-
         return `
-          <div class="gallery-item${sel ? ' selected' : ''}${draggable ? ' draggable' : ''}"
+          <div class="gallery-item${sel?' selected':''}${draggable?' draggable':''}"
                data-filename="${safeFile}"
                ${draggable ? 'draggable="true" ondragstart="dragStart(event)"' : ''}
-               ondragover="dragOver(event)"
-               ondragleave="dragLeave(event)"
-               ondrop="drop(event)"
-               ondragend="dragEnd(event)">
+               ondragover="dragOver(event)" ondragleave="dragLeave(event)"
+               ondrop="drop(event)" ondragend="dragEnd(event)">
             <div class="img-wrap">
               <img src="/media/${encodeURIComponent(file)}"
                    onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%23e4e6ea%22 width=%221%22 height=%221%22/></svg>'">
               ${draggable ? '<div class="drag-pip">&#8942;&#8942;</div>' : ''}
               <div class="item-overlay">
                 <div class="item-actions">
-                  <button class="ia-btn ia-play" onclick="_gPlay(${i})"   title="Afficher uniquement">&#9654;</button>
+                  <button class="ia-btn ia-play" onclick="_gPlay(${i})" title="Afficher uniquement">&#9654;</button>
                   <button class="ia-btn ia-del"  onclick="_gDelete(${i})" title="Supprimer">&#10005;</button>
                 </div>
               </div>
             </div>
             <div class="item-foot">
-              <span class="type-badge ${video ? 'badge-video' : gif ? 'badge-gif' : 'badge-img'}">${video ? 'VIDEO' : gif ? 'GIF' : 'IMG'}</span>
+              <span class="type-badge ${video?'badge-video':gif?'badge-gif':'badge-img'}">${video?'VIDEO':gif?'GIF':'IMG'}</span>
               <span class="item-name">${file}</span>
-                ${!video
-                  ? `<div class="dur-pill" onclick="event.stopPropagation()">
-                       <input type="number"
-                              value="${customDur}"
-                              placeholder="${defDur}"
-                              min="1" max="300"
-                              title="Durée personnalisée (vide = défaut)"
-                              onchange="_gSetDur(${i}, this.value)"
-                              onclick="event.stopPropagation()">
-                       <span>s</span>
-                     </div>`
-                  : ''
-                }
+              ${!video ? `<div class="dur-pill" onclick="event.stopPropagation()"><input type="number" value="${customDur}" placeholder="${defDur}" min="1" max="300" title="Duree" onchange="_gSetDur(${i},this.value)" onclick="event.stopPropagation()"><span>s</span></div>` : ''}
             </div>
           </div>`;
       }).join('');
     }
-
-    // Index-based proxies (avoids filename escaping in inline handlers)
     const _gPlay   = i => playSingle(_files[i]);
     const _gDelete = i => deleteFile(_files[i]);
     const _gSetDur = (i, v) => setFileDuration(_files[i], v);
@@ -901,22 +957,10 @@
     // ── Upload ────────────────────────────────────────────
     const uploadZone = document.getElementById('uploadZone');
     const fileInput  = document.getElementById('fileInput');
-
-    uploadZone.addEventListener('dragover', e => {
-      e.preventDefault();
-      uploadZone.classList.add('drag-on');
-    });
-    uploadZone.addEventListener('dragleave', e => {
-      if (!uploadZone.contains(e.relatedTarget)) uploadZone.classList.remove('drag-on');
-    });
-    uploadZone.addEventListener('drop', e => {
-      e.preventDefault();
-      uploadZone.classList.remove('drag-on');
-      if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
-    });
-    fileInput.addEventListener('change', () => {
-      if (fileInput.files.length) uploadFiles(fileInput.files);
-    });
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-on'); });
+    uploadZone.addEventListener('dragleave', e => { if (!uploadZone.contains(e.relatedTarget)) uploadZone.classList.remove('drag-on'); });
+    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-on'); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) uploadFiles(fileInput.files); });
 
     async function uploadFiles(files) {
       const prog = document.getElementById('uploadProgress');
@@ -927,243 +971,196 @@
       prog.style.display = 'none';
       fileInput.value = '';
       if (res.ok) {
-        // Vérifier si redirigé avec erreur quota
         if (res.url && res.url.includes('error=quota')) {
-          showToast('Espace insuffisant — supprimez des fichiers ou augmentez le quota');
+          showToast('Espace insuffisant -- augmentez votre licence');
         } else {
-          loadGallery();
-          loadStorage();
-          const n = files.length;
-          showToast(n + ' fichier' + (n > 1 ? 's' : '') + ' envoyé' + (n > 1 ? 's' : ''));
+          loadGallery(); loadDashboard();
+          showToast(files.length + ' fichier' + (files.length>1?'s':'') + ' envoye' + (files.length>1?'s':''));
         }
       }
     }
 
-    // ── Logo upload ───────────────────────────────────
+    // ── Logo ──────────────────────────────────────────────
     async function uploadLogo(files) {
       if (!files || !files.length) return;
-      const fd = new FormData();
-      fd.append('logo', files[0]);
-      // Reset input so the same file can be re-selected next time
+      const fd = new FormData(); fd.append('logo', files[0]);
       document.getElementById('logoInput').value = '';
-      try {
-        const res = await fetch('/api/logo', { method: 'POST', body: fd });
-        if (res.ok) {
-          // force cache-bust
-          const v = '?v=' + Date.now();
-          document.getElementById('siteLogo').src = '/static/logo.png' + v;
-          const pv = document.getElementById('logoPreview');
-          if (pv) { pv.src = '/static/logo.png' + v; pv.style.display = 'block'; }
-          document.getElementById('siteLogo').style.display = 'block';
-          document.getElementById('logoFallback').style.display = 'none';
-          showToast('Logo mis à jour');
-        } else {
-          const data = await res.json().catch(() => ({}));
-          showToast('Erreur: ' + (data.message || res.statusText));
-        }
-      } catch (err) {
-        showToast('Erreur réseau : impossible de contacter le serveur');
+      const res = await fetch('/api/logo', { method: 'POST', body: fd });
+      if (res.ok) {
+        const v = '?v=' + Date.now();
+        document.getElementById('siteLogo').src = '/static/logo.png' + v;
+        document.getElementById('siteLogo').style.display = 'block';
+        const pv = document.getElementById('logoPreview');
+        if (pv) { pv.src = '/static/logo.png' + v; pv.style.display = 'block'; }
+        showToast('Logo mis a jour');
       }
     }
-
     async function removeLogo() {
-      if (!confirm('Supprimer le logo actuel ?')) return;
+      if (!confirm('Supprimer le logo ?')) return;
       const res = await fetch('/api/logo', { method: 'DELETE' });
       if (res.ok) {
         document.getElementById('siteLogo').style.display = 'none';
-        document.getElementById('logoFallback').style.display = 'flex';
         const pv = document.getElementById('logoPreview');
         if (pv) pv.style.display = 'none';
-        showToast('Logo supprimé');
-      } else {
-        const data = await res.json().catch(() => ({}));
-        showToast('Erreur: ' + (data.message || res.statusText));
+        showToast('Logo supprime');
       }
     }
 
-    // ── Gallery drag & drop ───────────────────────────────
-    function dragStart(e) {
-      isDragging = true;
-      dragSrcEl  = e.currentTarget;
-      e.dataTransfer.effectAllowed = 'move';
-      e.currentTarget.classList.add('dragging');
-    }
-    function dragOver(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (e.currentTarget !== dragSrcEl) e.currentTarget.classList.add('drag-over');
-    }
+    // ── Drag & drop gallery ───────────────────────────────
+    function dragStart(e) { isDragging=true; dragSrcEl=e.currentTarget; e.dataTransfer.effectAllowed='move'; e.currentTarget.classList.add('dragging'); }
+    function dragOver(e)  { e.preventDefault(); e.dataTransfer.dropEffect='move'; if(e.currentTarget!==dragSrcEl) e.currentTarget.classList.add('drag-over'); }
     function dragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
-    function dragEnd(e) {
-      isDragging = false;
-      document.querySelectorAll('.gallery-item').forEach(el =>
-        el.classList.remove('drag-over', 'dragging'));
-    }
+    function dragEnd()    { isDragging=false; document.querySelectorAll('.gallery-item').forEach(el=>el.classList.remove('drag-over','dragging')); }
     function drop(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      const target = e.currentTarget;
-      target.classList.remove('drag-over');
-      if (!dragSrcEl || dragSrcEl === target) { isDragging = false; return; }
-
+      e.preventDefault(); e.stopPropagation();
+      const target = e.currentTarget; target.classList.remove('drag-over');
+      if (!dragSrcEl || dragSrcEl === target) { isDragging=false; return; }
       const items = [...document.querySelectorAll('.gallery-item')];
-      const si = items.indexOf(dragSrcEl);
-      const di = items.indexOf(target);
-      const g  = document.getElementById('gallery');
+      const si = items.indexOf(dragSrcEl), di = items.indexOf(target);
+      const g = document.getElementById('gallery');
       if (si < di) g.insertBefore(dragSrcEl, target.nextSibling);
-      else         g.insertBefore(dragSrcEl, target);
-
+      else g.insertBefore(dragSrcEl, target);
       isDragging = false;
       saveOrder();
     }
     async function saveOrder() {
-      const order = [...document.querySelectorAll('.gallery-item')]
-                      .map(el => el.dataset.filename);
+      const order = [...document.querySelectorAll('.gallery-item')].map(el => el.dataset.filename);
       _files = order;
-      await fetch('/api/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order }),
-      });
-      showToast('Ordre de lecture mis à jour');
+      await fetch('/api/order', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({order}) });
+      showToast('Ordre mis a jour');
     }
 
     // ── File actions ──────────────────────────────────────
     async function setFileDuration(filename, value) {
       const duration = value ? parseInt(value) : null;
-      await fetch('/api/file-duration/' + encodeURIComponent(filename), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ duration }),
-      });
-      showToast(duration ? `${filename} : ${duration}s` : 'Durée par défaut rétablie');
+      await fetch('/api/file-duration/'+encodeURIComponent(filename), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({duration}) });
+      showToast(duration ? filename+' : '+duration+'s' : 'Duree par defaut');
     }
-
     async function playSingle(filename) {
-      await fetch('/api/play-single/' + encodeURIComponent(filename), { method: 'POST' });
-      loadGallery();
-      loadConfig();
-      showToast('Affichage de ' + filename);
+      await fetch('/api/play-single/'+encodeURIComponent(filename), {method:'POST'});
+      loadGallery(); loadConfig();
+      showToast('Affichage de '+filename);
     }
     async function playAll() {
-      await fetch('/api/play-all', { method: 'POST' });
-      loadGallery();
-      loadConfig();
-      showToast('Lecture de toute la médiathèque');
+      await fetch('/api/play-all', {method:'POST'});
+      loadGallery(); loadConfig();
+      showToast('Lecture de toute la mediatheque');
     }
     async function deleteFile(filename) {
-      if (!confirm('Supprimer « ' + filename + ' » ?')) return;
-      await fetch('/api/delete/' + encodeURIComponent(filename), { method: 'DELETE' });
-      loadGallery();
-      loadStorage();
-      showToast(filename + ' supprimé');
+      if (!confirm('Supprimer '+filename+' ?')) return;
+      await fetch('/api/delete/'+encodeURIComponent(filename), {method:'DELETE'});
+      loadGallery(); loadDashboard();
+      showToast(filename+' supprime');
     }
     async function control(action) {
-      const res  = await fetch('/api/control/' + action, { method: 'POST' });
+      const res = await fetch('/api/control/'+action, {method:'POST'});
       const data = await res.json();
       showToast(data.message);
-      loadConfig();
-      loadGallery();
+      loadConfig(); loadDashboard();
     }
 
-    // ── Collapsible params ─────────────────────────────────
-    function toggleParams() {
-      const body = document.getElementById('paramsBody');
-      const btn  = document.getElementById('paramToggleBtn');
-      body.classList.toggle('collapsed');
-      btn.classList.toggle('collapsed');
+    // ── License ───────────────────────────────────────────
+    async function loadLicense() {
+      try {
+        const lic = await fetch('/api/license').then(r => r.json());
+        const tier = lic.tier || 'none';
+        const badge = document.getElementById('licenseBadge');
+        badge.textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
+        badge.className = 'license-badge badge-' + tier;
+        const qMb = lic.media_quota_mb || 0;
+        document.getElementById('licenseQuota').textContent =
+          qMb >= 1024 ? (qMb/1024).toFixed(0)+' Go' : qMb+' Mo';
+        const preview = document.getElementById('licenseKeyPreview');
+        if (lic.key_preview) {
+          preview.textContent = 'Cle : ' + lic.key_preview;
+          if (lic.activated) preview.textContent += ' (active le ' + lic.activated.substring(0,10) + ')';
+        } else {
+          preview.textContent = 'Aucune cle activee';
+        }
+      } catch(e) {}
+    }
+    async function activateLicense() {
+      const input = document.getElementById('licenseKeyInput');
+      const key = input.value.trim();
+      if (!key) { showToast('Entrez une cle de licence'); return; }
+      try {
+        const res = await fetch('/api/license/activate', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({key}),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message);
+          input.value = '';
+          loadLicense(); loadDashboard();
+        } else {
+          showToast('Erreur : ' + data.message);
+        }
+      } catch(e) {
+        showToast('Erreur reseau');
+      }
     }
 
-    // ── Git update ────────────────────────────────────
+    // ── Git update ────────────────────────────────────────
     async function loadGitStatus() {
       try {
         const data = await fetch('/api/update/status').then(r => r.json());
         const el = document.getElementById('gitInfo');
         if (data.success) {
-          const upToDate = data.up_to_date;
-          if (upToDate === false) {
-            el.innerHTML = `<span style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:#f97316;color:#fff;white-space:nowrap">&#x25B2; MISE À JOUR DISPONIBLE</span>`;
-          } else if (upToDate === true) {
-            el.innerHTML = `<span style="font-size:11px;font-weight:700;padding:4px 12px;border-radius:5px;background:var(--green);color:#fff;white-space:nowrap">&#x2713; À JOUR</span>`;
+          if (data.up_to_date === false) {
+            el.innerHTML = '<span class="git-badge git-outdated">Mise a jour disponible</span>';
+          } else if (data.up_to_date === true) {
+            el.innerHTML = '<span class="git-badge git-uptodate">A jour</span>';
+            document.getElementById('navVersion').textContent = 'v' + (data.commit || '?');
           } else {
-            el.innerHTML = `<span style="color:var(--text-2);font-size:12px">Statut inconnu</span>`;
+            el.innerHTML = '<span style="color:var(--text-2);font-size:12px">Statut inconnu</span>';
           }
         } else {
-          el.innerHTML = `<span style="color:var(--red);font-size:12px">${data.message || 'git non disponible'}</span>`;
+          el.innerHTML = '<span style="color:var(--red);font-size:12px">'+(data.message||'git non disponible')+'</span>';
         }
-      } catch (e) {
-        document.getElementById('gitInfo').innerHTML =
-          '<span style="color:var(--text-2)">git non disponible</span>';
+      } catch(e) {
+        document.getElementById('gitInfo').innerHTML = '<span style="color:var(--text-2)">git non disponible</span>';
       }
     }
-
     async function runUpdate() {
       const btn = document.getElementById('updateBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ Mise à jour en cours…';
+      btn.disabled = true; btn.textContent = 'Mise a jour...';
       try {
-        const data = await fetch('/api/update', { method: 'POST' }).then(r => r.json());
+        const data = await fetch('/api/update', {method:'POST'}).then(r => r.json());
         if (data.success) {
           if (data.updated) {
-            btn.textContent = '✓ Redémarrage de l\'appareil…';
-            setTimeout(() => location.reload(), 20000);
+            btn.textContent = 'Redemarrage...';
+            setTimeout(() => location.reload(), 4000);
             return;
-          } else {
-            showToast('Déjà à jour');
-            loadGitStatus();
-          }
-        } else {
-          showToast('Erreur : ' + data.message);
-        }
-      } catch (e) {
-        showToast('Erreur réseau');
-      }
-      btn.disabled = false;
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>Mettre à jour';
-    }
-
-    // ── Storage ────────────────────────────────────────────
-    async function loadStorage() {
-      try {
-        const data = await fetch('/api/storage').then(r => r.json());
-        const used = data.used_mb || 0;
-        const total = data.total_mb || 1;
-        const pct = data.usage_percent || 0;
-        const tier = data.tier || '';
-
-        document.getElementById('storageUsed').textContent = used >= 1024
-          ? (used / 1024).toFixed(1) + ' Go utilisés'
-          : used + ' Mo utilisés';
-        document.getElementById('storageTotal').textContent = total >= 1024
-          ? (total / 1024).toFixed(1) + ' Go'
-          : total + ' Mo';
-
-        const fill = document.getElementById('storageBarFill');
-        fill.style.width = Math.min(pct, 100) + '%';
-        fill.classList.remove('warn', 'crit');
-        if (pct >= 90) fill.classList.add('crit');
-        else if (pct >= 70) fill.classList.add('warn');
-
-        const tierEl = document.getElementById('storageTier');
-        if (tier) {
-          tierEl.textContent = 'Licence : ' + tier;
-        }
-      } catch (e) {
-        // Storage info not available
-      }
+          } else { showToast('Deja a jour'); loadGitStatus(); }
+        } else { showToast('Erreur : '+data.message); }
+      } catch(e) { showToast('Erreur reseau'); }
+      btn.disabled = false; btn.textContent = 'Mettre a jour';
     }
 
     // ── Init ──────────────────────────────────────────────
-    loadConfig();
-    loadGallery();
-    loadGitStatus();
-    loadStorage();
-    // Quota check on page load (redirect with ?error=quota)
+    // Route from hash
+    const hash = window.location.hash.replace('#','');
+    if (['dashboard','medias','settings'].includes(hash)) goTo(hash);
+    // Quota error check
     if (window.location.search.includes('error=quota')) {
-      showToast('Espace insuffisant — supprimez des fichiers ou augmentez le quota');
+      showToast('Espace insuffisant -- augmentez votre licence');
       history.replaceState(null, '', '/');
     }
-    setInterval(() => { if (!isDragging) { loadGallery(); loadStorage(); } }, 5000);
+
+    loadConfig();
+    loadGallery();
+    loadDashboard();
+    loadLicense();
+    loadGitStatus();
+
+    setInterval(() => {
+      if (!isDragging) {
+        loadDashboard();
+        if (_currentPage === 'medias') loadGallery();
+      }
+    }, 8000);
   </script>
 </body>
 </html>

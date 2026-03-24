@@ -186,6 +186,46 @@ cat ~/.ssh/rmg_deploy.pub
 git clone git@github.com:MartyMcFLem/RMG_Signage.git
 ```
 
+## Licences
+
+Le système utilise des clés de licence pour contrôler le quota de stockage média.
+
+### Tiers disponibles
+
+| Tier | Quota | Clé format |
+|---|---|---|
+| Starter | 2 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
+| Standard | 4 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
+| Professional | 8 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
+| Enterprise | 16 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
+| Unlimited | 24 Go | `RMGS-XXXXX-XXXXX-XXXXX` |
+
+Sans licence, le quota par défaut est de 2 Go.
+
+### Activer une licence
+
+1. Ouvrir l'interface web → **Paramètres** → **Licence**
+2. Entrer la clé et cliquer **Activer**
+3. Le quota est immédiatement mis à jour
+
+### Générer des clés (admin)
+
+```bash
+# Générer 1 clé standard
+python3 generate_keys.py --tier standard
+
+# Générer 10 clés professional
+python3 generate_keys.py --tier professional --count 10
+
+# Valider une clé
+python3 generate_keys.py --validate "RMGS-XXXXX-XXXXX-XXXXX"
+
+# Lister les tiers
+python3 generate_keys.py --list-tiers
+```
+
+> **Note** : `generate_keys.py` est un outil admin, il ne devrait pas être déployé sur les appareils clients.
+
 ## Dépannage
 
 **Le service ne démarre pas**

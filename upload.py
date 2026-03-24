@@ -31,7 +31,21 @@ PROJECT_DIR = os.environ.get("RMG_SIGNAGE_DIR", os.path.dirname(os.path.abspath(
 
 # Licence (quota stockage)
 LICENSE_FILE = os.environ.get("RMG_SIGNAGE_LICENSE", "/etc/rmg_signage/license.json")
-DEFAULT_MEDIA_QUOTA_MB = 4096  # 4 Go par défaut
+DEFAULT_MEDIA_QUOTA_MB = 2048  # 2 Go par défaut (sans licence)
+
+# ─── Système de clés de licence ───
+# Format : RMGS-XXXXX-XXXXX-XXXXX (base32, 15 chars payload)
+# Payload = tier_byte (1) + random (5) + HMAC-SHA256[:3] (3) = 9 bytes → 15 chars base32
+# Tiers disponibles :
+LICENSE_TIERS = {
+    0x01: {"name": "starter",       "quota_mb": 2048},    # 2 Go
+    0x02: {"name": "standard",      "quota_mb": 4096},    # 4 Go
+    0x03: {"name": "professional",  "quota_mb": 8192},    # 8 Go
+    0x04: {"name": "enterprise",    "quota_mb": 16384},   # 16 Go
+    0x05: {"name": "unlimited",     "quota_mb": 24576},   # 24 Go
+}
+# Clé secrète pour la validation HMAC (suffisante pour un système embarqué offline)
+_LICENSE_SECRET = b"RMG-S1gn4g3-2024-s3cr3t-k3y"
 
 # Configuration par défaut
 config = {
@@ -68,6 +82,56 @@ ALLOWED_UPLOAD_EXTENSIONS = {
 }
 
 
+def _license_hmac(data_bytes):
+    """Calcule un HMAC-SHA256 tronqué à 3 bytes pour la validation de clé."""
+    import hashlib, hmac
+    return hmac.new(_LICENSE_SECRET, data_bytes, hashlib.sha256).digest()[:3]
+
+
+def validate_license_key(key_str):
+    """Valide une clé de licence et retourne (valid, tier_name, quota_mb).
+    Format attendu : RMGS-XXXXX-XXXXX-XXXXX"""
+    import base64
+    key_str = key_str.strip().upper().replace(" ", "")
+    if not key_str.startswith("RMGS-"):
+        return False, None, 0
+    payload_b32 = key_str[5:].replace("-", "")
+    if len(payload_b32) != 15:
+        return False, None, 0
+    # Padding base32 pour 15 chars → 9 bytes (15 chars * 5 bits = 75 bits → 10 bytes avec padding)
+    # Mais 9 bytes = 72 bits → 15 chars base32 (avec 3 bits padding)
+    try:
+        padded = payload_b32 + "="  # 15 chars + 1 pad = 16 → 10 bytes, on prend 9
+        raw = base64.b32decode(padded)[:9]
+    except Exception:
+        return False, None, 0
+    if len(raw) < 9:
+        return False, None, 0
+    tier_byte = raw[0]
+    random_part = raw[1:6]
+    provided_mac = raw[6:9]
+    expected_mac = _license_hmac(bytes([tier_byte]) + random_part)
+    if provided_mac != expected_mac:
+        return False, None, 0
+    tier_info = LICENSE_TIERS.get(tier_byte)
+    if not tier_info:
+        return False, None, 0
+    return True, tier_info["name"], tier_info["quota_mb"]
+
+
+def generate_license_key(tier_code):
+    """Génère une clé de licence pour le tier donné (usage admin/interne).
+    tier_code: 0x01 à 0x05"""
+    import base64
+    if tier_code not in LICENSE_TIERS:
+        raise ValueError(f"Tier inconnu: {tier_code}")
+    random_part = os.urandom(5)
+    mac = _license_hmac(bytes([tier_code]) + random_part)
+    raw = bytes([tier_code]) + random_part + mac  # 9 bytes
+    b32 = base64.b32encode(raw).decode().rstrip("=")[:15]
+    return f"RMGS-{b32[:5]}-{b32[5:10]}-{b32[10:15]}"
+
+
 def _read_license():
     """Lit le fichier de licence et retourne ses données."""
     try:
@@ -76,7 +140,18 @@ def _read_license():
                 return json.load(f)
     except (IOError, json.JSONDecodeError, ValueError):
         pass
-    return {"tier": "standard", "media_quota_mb": DEFAULT_MEDIA_QUOTA_MB}
+    return {"tier": "none", "media_quota_mb": DEFAULT_MEDIA_QUOTA_MB}
+
+
+def _save_license(data):
+    """Écrit le fichier de licence."""
+    try:
+        os.makedirs(os.path.dirname(LICENSE_FILE), exist_ok=True)
+        with open(LICENSE_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except (IOError, OSError):
+        return False
 
 
 def get_storage_info():
@@ -611,8 +686,46 @@ def api_storage():
 
 @app.route("/api/license")
 def api_license():
-    """Retourne les informations de licence"""
-    return jsonify(_read_license())
+    """Retourne les informations de licence (sans la clé complète)"""
+    lic = _read_license()
+    safe = {
+        "tier": lic.get("tier", "none"),
+        "media_quota_mb": lic.get("media_quota_mb", DEFAULT_MEDIA_QUOTA_MB),
+        "activated": lic.get("activated", None),
+        "key_preview": lic.get("key_preview", None),
+    }
+    return jsonify(safe)
+
+
+@app.route("/api/license/activate", methods=["POST"])
+def activate_license():
+    """Active une clé de licence. Payload JSON : {"key": "RMGS-XXXXX-XXXXX-XXXXX"}"""
+    data = request.json
+    if not data or not data.get("key"):
+        return jsonify({"success": False, "message": "Clé manquante"}), 400
+
+    key_str = data["key"].strip()
+    valid, tier_name, quota_mb = validate_license_key(key_str)
+
+    if not valid:
+        return jsonify({"success": False, "message": "Clé de licence invalide"}), 400
+
+    lic = _read_license()
+    lic["tier"] = tier_name
+    lic["media_quota_mb"] = quota_mb
+    lic["activated"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    # Stocker un aperçu de la clé (pas la clé complète)
+    lic["key_preview"] = key_str[:9] + "..." + key_str[-5:]
+
+    if not _save_license(lic):
+        return jsonify({"success": False, "message": "Impossible d'écrire la licence"}), 500
+
+    return jsonify({
+        "success": True,
+        "message": f"Licence {tier_name} activée ({quota_mb} MB)",
+        "tier": tier_name,
+        "quota_mb": quota_mb,
+    })
 
 
 @app.route("/api/status")
