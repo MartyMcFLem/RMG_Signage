@@ -959,6 +959,9 @@ def play_all_files():
 
 
 # === PLAYLISTS API ===
+# IMPORTANT: les routes statiques (deactivate) DOIVENT etre declarees
+# AVANT les routes parametriques (<pl_id>) sinon Flask matche "deactivate"
+# comme un pl_id.
 
 @app.route("/api/playlists", methods=["GET"])
 def get_playlists():
@@ -993,6 +996,20 @@ def create_playlist():
     return jsonify({"success": True, "playlist": pl})
 
 
+@app.route("/api/playlists/deactivate", methods=["POST"])
+def deactivate_playlist():
+    """Desactive la playlist, revient a la lecture de tous les fichiers"""
+    global config
+    config['active_playlist'] = None
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    restart_mpv()
+    return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
+
+
 @app.route("/api/playlists/<pl_id>", methods=["GET"])
 def get_playlist(pl_id):
     """Retourne une playlist par son id"""
@@ -1019,7 +1036,6 @@ def update_playlist(pl_id):
             json.dump(config, f, indent=2)
     except:
         pass
-    # Si c'est la playlist active, redemarrer mpv
     if config.get('active_playlist') == pl_id:
         restart_mpv()
     return jsonify({"success": True, "playlist": pl})
@@ -1034,7 +1050,6 @@ def delete_playlist(pl_id):
     config['playlists'] = [p for p in playlists if p['id'] != pl_id]
     if len(config['playlists']) == before:
         return jsonify({"success": False, "message": "Playlist introuvable"}), 404
-    # Desactiver si c'etait la playlist active
     if config.get('active_playlist') == pl_id:
         config['active_playlist'] = None
         restart_mpv()
@@ -1063,20 +1078,6 @@ def activate_playlist(pl_id):
         pass
     restart_mpv()
     return jsonify({"success": True, "message": f"Playlist '{pl['name']}' activee"})
-
-
-@app.route("/api/playlists/deactivate", methods=["POST"])
-def deactivate_playlist():
-    """Desactive la playlist, revient a la lecture de tous les fichiers"""
-    global config
-    config['active_playlist'] = None
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except:
-        pass
-    restart_mpv()
-    return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
 
 
 @app.route("/api/update/status", methods=["GET"])
