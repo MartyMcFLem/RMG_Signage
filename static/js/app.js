@@ -425,6 +425,11 @@ async function runUpdate() {
 // ── Playlists ─────────────────────────────────────────
 let _plModalMode = 'create';
 let _plModalId = null;
+let _playlists = [];
+
+const _plActivate = i => activatePlaylist(_playlists[i].id);
+const _plEdit     = i => openPlModal(_playlists[i].id);
+const _plDelete   = i => deletePlaylist(_playlists[i].id, _playlists[i].name);
 
 async function loadPlaylists() {
   try {
@@ -446,7 +451,8 @@ async function loadPlaylists() {
       list.innerHTML = '<div class="pl-empty">Aucune playlist. Cliquez sur "+ Nouvelle playlist" pour commencer.</div>';
       return;
     }
-    list.innerHTML = pls.map(pl => {
+    _playlists = pls;
+    list.innerHTML = pls.map((pl, idx) => {
       const isActive = pl.id === active;
       const n = (pl.files || []).length;
       return `
@@ -459,9 +465,9 @@ async function loadPlaylists() {
           <div class="pl-actions">
             ${isActive
               ? '<button class="btn btn-ghost btn-sm" onclick="deactivatePlaylist()">Stop</button>'
-              : '<button class="btn btn-blue btn-sm" onclick="activatePlaylist(\''+pl.id+'\')">Lire</button>'}
-            <button class="btn btn-ghost btn-sm" onclick="openPlModal(\''+pl.id+'\')">Editer</button>
-            <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePlaylist(\''+pl.id+'\',\''+pl.name.replace(/'/g,"\\'")+'\')">Suppr.</button>
+              : `<button class="btn btn-blue btn-sm" onclick="_plActivate(${idx})">Lire</button>`}
+            <button class="btn btn-ghost btn-sm" onclick="_plEdit(${idx})">Editer</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="_plDelete(${idx})">Suppr.</button>
           </div>
         </div>`;
     }).join('');
