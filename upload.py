@@ -565,7 +565,7 @@ def get_mpv_cmd():
             f.write("border=no\n")
             f.write("osd-bar=no\n")
             f.write("background=0.0/0.0/0.0\n")
-            f.write("panscan=1.0\n")  # Zoom pour remplir l'écran (coupe les bords si rapport différent)
+            f.write("panscan=0.0\n")  # 0 = fit (image entiere visible, barres noires si ratio different)
             f.write(f"image-display-duration={config['image_duration']}\n")
             f.write(f"video-rotate={config.get('rotation', 0)}\n")
             f.write(f"input-ipc-server={MPV_SOCKET}\n")

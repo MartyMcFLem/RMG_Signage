@@ -66,7 +66,7 @@ echo ""
 # ─── 1. Paquets système
 echo "[1/8] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core plymouth plymouth-themes
+apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core
 
 # ─── 2. Utilisateur et groupes
 echo "[2/8] Configuration de l'utilisateur '$SERVICE_USER'..."
@@ -273,132 +273,27 @@ for BOOT_DIR in /boot/firmware /boot; do
 done
 
 if [ -n "$CONFIG_FILE" ]; then
-  # Désactiver le splash arc-en-ciel du GPU Pi (≠ Plymouth)
   if ! grep -q "disable_splash" "$CONFIG_FILE"; then
     printf "\n# RMG Signage — boot silencieux\ndisable_splash=1\n" >> "$CONFIG_FILE"
   fi
   if [ -f "$CMDLINE_FILE" ] && ! grep -q "quiet" "$CMDLINE_FILE"; then
     cp "$CMDLINE_FILE" "$CMDLINE_FILE.bak"
     sed -i 's/console=tty1/console=tty3/g' "$CMDLINE_FILE"
-    sed -i 's/$/ quiet splash loglevel=3 logo.nologo vt.global_cursor_default=0 rd.systemd.show_status=false plymouth.ignore-serial-consoles/' "$CMDLINE_FILE"
-  elif [ -f "$CMDLINE_FILE" ] && ! grep -q "splash" "$CMDLINE_FILE"; then
-    sed -i 's/quiet/quiet splash plymouth.ignore-serial-consoles/' "$CMDLINE_FILE"
+    sed -i 's/$/ quiet loglevel=3 logo.nologo vt.global_cursor_default=0 rd.systemd.show_status=false/' "$CMDLINE_FILE"
   fi
-  echo "  → Boot silencieux + Plymouth configuré ($CONFIG_FILE)"
+  echo "  → Boot silencieux configuré ($CONFIG_FILE)"
 else
   echo "  ⚠️  /boot/config.txt introuvable — boot silencieux non appliqué (normal hors Pi)"
 fi
 
-# ─── 6b. Thème Plymouth (splash au boot Linux)
-echo "[6b/8] Configuration du thème Plymouth..."
-PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/rmg-signage"
-mkdir -p "$PLYMOUTH_THEME_DIR"
-
-if [ -f "$PROJECT_DIR/static/splash.png" ]; then
-  cp "$PROJECT_DIR/static/splash.png" "$PLYMOUTH_THEME_DIR/splash.png"
-  echo "  → splash.png copié"
+# Nettoyer Plymouth s'il était installé précédemment
+if [ -d "/usr/share/plymouth/themes/rmg-signage" ]; then
+  rm -rf "/usr/share/plymouth/themes/rmg-signage"
+  echo "  → Ancien thème Plymouth supprimé"
 fi
-
-cat > "$PLYMOUTH_THEME_DIR/rmg-signage.plymouth" << 'PLYM_EOF'
-[Plymouth Theme]
-Name=RMG Signage
-Description=RMG Signage boot splash
-ModuleName=script
-
-[script]
-ImageDir=/usr/share/plymouth/themes/rmg-signage
-ScriptFile=/usr/share/plymouth/themes/rmg-signage/rmg-signage.script
-PLYM_EOF
-
-cat > "$PLYMOUTH_THEME_DIR/rmg-signage.script" << 'PLYM_EOF'
-// ── Dimensions ecran ──
-// Plymouth peut retourner 0 tres tot au boot ; on re-detecte via un callback.
-screen_width  = Window.GetWidth();
-screen_height = Window.GetHeight();
-
-// Fallback raisonnable si la detection echoue
-if (screen_width  < 1) { screen_width  = 1920; }
-if (screen_height < 1) { screen_height = 1080; }
-
-// ── Fond noir plein ecran ──
-bg = Sprite(Image.Fill(screen_width, screen_height, 0, 0, 0, 1.0));
-bg.SetZ(-100);
-
-// ── Splash : scale-to-fill (couvre tout l'ecran, centre, rogne si besoin) ──
-logo_image = Image("splash.png");
-lw = logo_image.GetWidth();
-lh = logo_image.GetHeight();
-
-if (lw > 0 && lh > 0) {
-    // Calculer le ratio pour couvrir tout l'ecran (comme CSS object-fit:cover)
-    ratio_w = screen_width  / lw;
-    ratio_h = screen_height / lh;
-
-    // Prendre le plus grand ratio pour remplir l'ecran
-    if (ratio_w > ratio_h) {
-        scale = ratio_w;
-    } else {
-        scale = ratio_h;
-    }
-
-    new_w = Math.Floor(lw * scale);
-    new_h = Math.Floor(lh * scale);
-
-    // Eviter un upscale excessif (max 3x) pour ne pas trop degrader
-    if (scale > 3) {
-        new_w = screen_width;
-        new_h = screen_height;
-    }
-
-    logo_image = logo_image.Scale(new_w, new_h);
-    lw = new_w;
-    lh = new_h;
-}
-
-logo = Sprite(logo_image);
-// Centrer (si l'image depasse, les bords sont rognes naturellement)
-logo.SetX(Math.Floor((screen_width  - lw) / 2));
-logo.SetY(Math.Floor((screen_height - lh) / 2));
-
-// ── Re-layout si Plymouth detecte l'ecran plus tard ──
-fun refresh_callback() {
-    new_w = Window.GetWidth();
-    new_h = Window.GetHeight();
-    if (new_w > 0 && new_h > 0 && (new_w != screen_width || new_h != screen_height)) {
-        screen_width  = new_w;
-        screen_height = new_h;
-
-        // Refaire le fond
-        bg.SetImage(Image.Fill(screen_width, screen_height, 0, 0, 0, 1.0));
-
-        // Recharger et rescaler le splash
-        fresh = Image("splash.png");
-        fw = fresh.GetWidth();
-        fh = fresh.GetHeight();
-        if (fw > 0 && fh > 0) {
-            rw = screen_width  / fw;
-            rh = screen_height / fh;
-            if (rw > rh) { s = rw; } else { s = rh; }
-            if (s > 3) { s = 1; }
-            sw = Math.Floor(fw * s);
-            sh = Math.Floor(fh * s);
-            fresh = fresh.Scale(sw, sh);
-            logo.SetImage(fresh);
-            logo.SetX(Math.Floor((screen_width  - sw) / 2));
-            logo.SetY(Math.Floor((screen_height - sh) / 2));
-        }
-    }
-}
-
-Plymouth.SetRefreshFunction(refresh_callback);
-PLYM_EOF
-
-if command -v plymouth-set-default-theme &>/dev/null; then
-  plymouth-set-default-theme rmg-signage -R 2>/dev/null \
-    && echo "  → Thème Plymouth activé + initramfs mis à jour" \
-    || echo "  ⚠️  Impossible de reconstruire l'initramfs (plymouth-set-default-theme -R)"
-else
-  echo "  ⚠️  plymouth-set-default-theme introuvable — Plymouth non configuré"
+# Retirer les flags Plymouth de cmdline.txt si présents
+if [ -f "$CMDLINE_FILE" ]; then
+  sed -i 's/ splash//g; s/ plymouth.ignore-serial-consoles//g' "$CMDLINE_FILE"
 fi
 
 # ─── 7. Service systemd (généré dynamiquement avec les chemins réels)
@@ -406,7 +301,7 @@ echo "[7/8] Déploiement du service systemd..."
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
 Description=RMG Signage - Flask & MPV (${BRANCH})
-After=network.target plymouth.service local-fs.target
+After=network.target local-fs.target
 Wants=network.target
 RequiresMountsFor=$MEDIA_DIR
 StartLimitIntervalSec=60
@@ -428,7 +323,9 @@ Environment=RMG_SIGNAGE_SERVICE=$SERVICE_NAME
 Environment=RMG_SIGNAGE_LICENSE=$LICENSE_FILE
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
+ExecStartPre=+/bin/bash $PROJECT_DIR/splash_helper.sh start
 ExecStart=/bin/bash $PROJECT_DIR/start_rmg_signage.sh
+ExecStopPost=+/bin/bash $PROJECT_DIR/splash_helper.sh stop
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
