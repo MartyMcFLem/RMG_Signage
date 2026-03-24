@@ -311,26 +311,38 @@ async function setFileDuration(filename, value) {
   showToast(duration ? filename+' : '+duration+'s' : 'Duree par defaut');
 }
 async function playSingle(filename) {
-  await fetch('/api/play-single/'+encodeURIComponent(filename), {method:'POST'});
-  loadGallery(); loadConfig();
-  showToast('Affichage de '+filename);
+  try {
+    const res = await fetch('/api/play-single/'+encodeURIComponent(filename), {method:'POST'});
+    const data = await res.json();
+    showToast(data.message || 'OK');
+    loadGallery(); loadConfig(); loadDashboard();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 async function playAll() {
-  await fetch('/api/play-all', {method:'POST'});
-  loadGallery(); loadConfig();
-  showToast('Lecture de toute la mediatheque');
+  try {
+    const res = await fetch('/api/play-all', {method:'POST'});
+    const data = await res.json();
+    showToast(data.message || 'OK');
+    loadGallery(); loadConfig(); loadDashboard();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 async function deleteFile(filename) {
   if (!confirm('Supprimer '+filename+' ?')) return;
-  await fetch('/api/delete/'+encodeURIComponent(filename), {method:'DELETE'});
-  loadGallery(); loadDashboard();
-  showToast(filename+' supprime');
+  try {
+    await fetch('/api/delete/'+encodeURIComponent(filename), {method:'DELETE'});
+    loadGallery(); loadDashboard();
+    showToast(filename+' supprime');
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 async function control(action) {
-  const res = await fetch('/api/control/'+action, {method:'POST'});
-  const data = await res.json();
-  showToast(data.message);
-  loadConfig(); loadDashboard();
+  try {
+    const res = await fetch('/api/control/'+action, {method:'POST'});
+    const data = await res.json();
+    showToast(data.message || 'OK');
+    loadConfig(); loadDashboard();
+  } catch(e) {
+    showToast('Erreur : ' + e.message);
+  }
 }
 
 // ── License ───────────────────────────────────────────
@@ -482,16 +494,20 @@ async function deletePlaylist(id, name) {
 }
 
 async function activatePlaylist(id) {
-  const res = await fetch('/api/playlists/' + id + '/activate', {method: 'POST'});
-  const data = await res.json();
-  showToast(data.message);
-  loadPlaylists(); loadDashboard(); loadConfig();
+  try {
+    const res = await fetch('/api/playlists/' + id + '/activate', {method: 'POST'});
+    const data = await res.json();
+    showToast(data.message || 'Playlist activee');
+    loadPlaylists(); loadDashboard(); loadConfig();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 async function deactivatePlaylist() {
-  await fetch('/api/playlists/deactivate', {method: 'POST'});
-  showToast('Lecture de tous les fichiers');
-  loadPlaylists(); loadDashboard(); loadConfig();
+  try {
+    await fetch('/api/playlists/deactivate', {method: 'POST'});
+    showToast('Lecture de tous les fichiers');
+    loadPlaylists(); loadDashboard(); loadConfig();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 // ── Playlist Modal ────────────────────────────────────
