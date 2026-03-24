@@ -311,43 +311,86 @@ ScriptFile=/usr/share/plymouth/themes/rmg-signage/rmg-signage.script
 PLYM_EOF
 
 cat > "$PLYMOUTH_THEME_DIR/rmg-signage.script" << 'PLYM_EOF'
+// ── Dimensions ecran ──
+// Plymouth peut retourner 0 tres tot au boot ; on re-detecte via un callback.
 screen_width  = Window.GetWidth();
 screen_height = Window.GetHeight();
 
-// Fallback si les dimensions sont nulles (peut arriver tôt au boot)
+// Fallback raisonnable si la detection echoue
 if (screen_width  < 1) { screen_width  = 1920; }
 if (screen_height < 1) { screen_height = 1080; }
 
-// Fond noir plein écran
+// ── Fond noir plein ecran ──
 bg = Sprite(Image.Fill(screen_width, screen_height, 0, 0, 0, 1.0));
 bg.SetZ(-100);
 
-// Logo : scale to fit (conserver le ratio, occuper max 90 % de l'écran)
+// ── Splash : scale-to-fill (couvre tout l'ecran, centre, rogne si besoin) ──
 logo_image = Image("splash.png");
 lw = logo_image.GetWidth();
 lh = logo_image.GetHeight();
 
-max_w = Math.Floor(screen_width  * 0.9);
-max_h = Math.Floor(screen_height * 0.9);
-
 if (lw > 0 && lh > 0) {
-    if (lw > max_w || lh > max_h) {
-        if ((lw * max_h) > (lh * max_w)) {
-            new_w = max_w;
-            new_h = Math.Floor(lh * max_w / lw);
-        } else {
-            new_h = max_h;
-            new_w = Math.Floor(lw * max_h / lh);
-        }
-        logo_image = logo_image.Scale(new_w, new_h);
-        lw = new_w;
-        lh = new_h;
+    // Calculer le ratio pour couvrir tout l'ecran (comme CSS object-fit:cover)
+    ratio_w = screen_width  / lw;
+    ratio_h = screen_height / lh;
+
+    // Prendre le plus grand ratio pour remplir l'ecran
+    if (ratio_w > ratio_h) {
+        scale = ratio_w;
+    } else {
+        scale = ratio_h;
     }
+
+    new_w = Math.Floor(lw * scale);
+    new_h = Math.Floor(lh * scale);
+
+    // Eviter un upscale excessif (max 3x) pour ne pas trop degrader
+    if (scale > 3) {
+        new_w = screen_width;
+        new_h = screen_height;
+    }
+
+    logo_image = logo_image.Scale(new_w, new_h);
+    lw = new_w;
+    lh = new_h;
 }
 
 logo = Sprite(logo_image);
+// Centrer (si l'image depasse, les bords sont rognes naturellement)
 logo.SetX(Math.Floor((screen_width  - lw) / 2));
 logo.SetY(Math.Floor((screen_height - lh) / 2));
+
+// ── Re-layout si Plymouth detecte l'ecran plus tard ──
+fun refresh_callback() {
+    new_w = Window.GetWidth();
+    new_h = Window.GetHeight();
+    if (new_w > 0 && new_h > 0 && (new_w != screen_width || new_h != screen_height)) {
+        screen_width  = new_w;
+        screen_height = new_h;
+
+        // Refaire le fond
+        bg.SetImage(Image.Fill(screen_width, screen_height, 0, 0, 0, 1.0));
+
+        // Recharger et rescaler le splash
+        fresh = Image("splash.png");
+        fw = fresh.GetWidth();
+        fh = fresh.GetHeight();
+        if (fw > 0 && fh > 0) {
+            rw = screen_width  / fw;
+            rh = screen_height / fh;
+            if (rw > rh) { s = rw; } else { s = rh; }
+            if (s > 3) { s = 1; }
+            sw = Math.Floor(fw * s);
+            sh = Math.Floor(fh * s);
+            fresh = fresh.Scale(sw, sh);
+            logo.SetImage(fresh);
+            logo.SetX(Math.Floor((screen_width  - sw) / 2));
+            logo.SetY(Math.Floor((screen_height - sh) / 2));
+        }
+    }
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
 PLYM_EOF
 
 if command -v plymouth-set-default-theme &>/dev/null; then
