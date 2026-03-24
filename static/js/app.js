@@ -51,10 +51,11 @@ function showToast(msg) {
 // ── Dashboard ─────────────────────────────────────────
 async function loadDashboard() {
   try {
+    const _safe = url => fetch(url).then(r => r.json()).catch(() => ({}));
     const [status, storage, lic] = await Promise.all([
-      fetch('/api/status').then(r => r.json()),
-      fetch('/api/storage').then(r => r.json()),
-      fetch('/api/license').then(r => r.json()),
+      _safe('/api/status'),
+      _safe('/api/storage'),
+      _safe('/api/license'),
     ]);
 
     const mpvEl = document.getElementById('dashMpvStatus');
@@ -80,13 +81,13 @@ async function loadDashboard() {
       document.getElementById('navSerialFull').textContent = status.serial;
     }
 
-    const used = storage.used_mb || 0;
-    const total = storage.total_mb || 1;
-    const pct = storage.usage_percent || 0;
+    const used = storage.used_mb ?? 0;
+    const total = storage.total_mb ?? 0;
+    const pct = storage.usage_percent ?? 0;
     const fmtSize = mb => mb >= 1024 ? (mb/1024).toFixed(1)+' Go' : mb+' Mo';
-    document.getElementById('storageUsed').textContent = fmtSize(used) + ' utilises';
-    document.getElementById('storageTotal').textContent = fmtSize(total);
-    document.getElementById('storagePct').textContent = pct + '% utilise';
+    document.getElementById('storageUsed').textContent = total > 0 ? fmtSize(used) + ' utilises' : '--';
+    document.getElementById('storageTotal').textContent = total > 0 ? fmtSize(total) : '--';
+    document.getElementById('storagePct').textContent = total > 0 ? pct + '% utilise' : '';
     const fill = document.getElementById('storageFill');
     fill.style.width = Math.min(pct, 100) + '%';
     fill.classList.remove('warn','crit');
