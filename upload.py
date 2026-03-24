@@ -21,54 +21,90 @@ MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
 MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", os.path.join(HOME_DIR, ".config", "mpv"))
 LOG_FILE = os.path.join(MEDIA_DIR, "rmg_signage-mpv.log")
 
-# Branche git et port Flask — injectés par systemd selon l'environnement (prod/dev)
+# Branche git et port Flask — injectes par systemd selon l'environnement (prod/dev)
 GIT_BRANCH = os.environ.get("RMG_SIGNAGE_BRANCH", "main")
 FLASK_PORT  = int(os.environ.get("RMG_SIGNAGE_PORT", 5000))
 
-# Configuration par défaut
-config = {
+# Nom du service systemd (pour le redemarrage apres mise a jour)
+SERVICE_NAME = os.environ.get("RMG_SIGNAGE_SERVICE", "rmg_signage")
+
+# Repertoire projet (pour les operations git)
+PROJECT_DIR = os.environ.get("RMG_SIGNAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
+
+# Extensions media autorisees
+ALLOWED_EXTENSIONS = {
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
+    '.heic', '.heif',
+    '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'
+}
+
+# Taille maximale d'upload : 500 Mo
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024
+
+# Cles de configuration autorisees (whitelist)
+ALLOWED_CONFIG_KEYS = {
+    'image_duration', 'shuffle', 'loop', 'dark_mode',
+    'rotation', 'single_file_mode', 'selected_file',
+    'file_order', 'file_durations',
+}
+
+# Configuration par defaut
+_DEFAULT_CONFIG = {
     "image_duration": 8,
     "shuffle": True,
     "loop": True,
     "dark_mode": False,
-    "rotation": 0,           # rotation affichage : 0, 90, 180, 270
+    "rotation": 0,
     "single_file_mode": False,
     "selected_file": None,
-    "file_order": [],        # ordre personnalisé des fichiers
-    "file_durations": {}     # durées par fichier {"photo.jpg": 12}
+    "file_order": [],
+    "file_durations": {}
 }
+
+config = dict(_DEFAULT_CONFIG)
+_config_lock = threading.Lock()
 
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, 'r') as f:
             config.update(json.load(f))
-    except:
+    except (IOError, json.JSONDecodeError, ValueError):
         pass
 
 mpv_process = None
 _mpv_lock = threading.Lock()
 MPV_SOCKET = "/tmp/mpv-socket"
 
-# Taille maximale d'upload : 500 Mo
-MAX_UPLOAD_SIZE = 500 * 1024 * 1024
-
-# Extensions media autorisées à l'upload
-ALLOWED_UPLOAD_EXTENSIONS = {
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
-    '.heic', '.heif',
-    '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'
-}
-
 
 _SERIAL_PATTERN = re.compile(r'^rmg-sign-[a-z0-9]{16}$')
-
-# Serial mis en cache au démarrage
 _device_serial = None
 
 
+def _safe_filename(filename, base_dir):
+    """Valide qu'un nom de fichier est sur (pas de path traversal).
+    Retourne le chemin absolu si valide, None sinon."""
+    if not filename:
+        return None
+    safe = secure_filename(filename)
+    if not safe:
+        return None
+    full_path = os.path.realpath(os.path.join(base_dir, safe))
+    if not full_path.startswith(os.path.realpath(base_dir) + os.sep):
+        return None
+    return full_path
+
+
+def _save_config():
+    """Ecrit la config sur disque (doit etre appele avec _config_lock tenu)."""
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except (IOError, OSError):
+        pass
+
+
 def _generate_serial_suffix():
-    """Génère le suffixe du serial : CPU serial Pi complet (16 chars) ou UUID fallback."""
-    # Méthode 1 : CPU serial du Raspberry Pi (positions [10:26] de la ligne Serial)
+    """Genere le suffixe du serial : CPU serial Pi complet (16 chars) ou UUID fallback."""
     try:
         with open('/proc/cpuinfo', 'r') as f:
             for line in f:
@@ -76,29 +112,28 @@ def _generate_serial_suffix():
                     suffix = line[10:26].strip()
                     if len(suffix) == 16 and re.match(r'^[0-9a-f]{16}$', suffix):
                         return suffix
-    except Exception:
+    except (IOError, OSError):
         pass
-    # Méthode 2 : UUID aléatoire persisté (16 chars hex)
     serial_file = '/etc/rmg_serial'
     try:
         if os.path.exists(serial_file):
             stored = open(serial_file).read().strip()
             if len(stored) == 16:
                 return stored
-    except Exception:
+    except (IOError, OSError):
         pass
     suffix = _uuid.uuid4().hex[:16]
     try:
         with open(serial_file, 'w') as f:
             f.write(suffix)
-    except Exception:
+    except (IOError, OSError):
         pass
     return suffix
 
 
 def get_device_serial():
-    """Retourne le numéro de série du device (rmg-sign-XXXXXXXXX).
-    Priorité : hostname OS → config.json → génération depuis CPU serial ou UUID.
+    """Retourne le numero de serie du device (rmg-sign-XXXXXXXXX).
+    Priorite : hostname OS -> config.json -> generation depuis CPU serial ou UUID.
     En fallback, tente de corriger le hostname via sudo hostnamectl."""
     global _device_serial, config
     if _device_serial:
@@ -110,28 +145,22 @@ def get_device_serial():
         _device_serial = hostname
         return _device_serial
 
-    # Fallback : serial stocké dans config
     stored = config.get('device_serial', '')
     if stored and _SERIAL_PATTERN.match(stored):
         _device_serial = stored
         return _device_serial
 
-    # Génération
     serial = f"rmg-sign-{_generate_serial_suffix()}"
-    config['device_serial'] = serial
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except Exception:
-        pass
+    with _config_lock:
+        config['device_serial'] = serial
+        _save_config()
 
-    # Tenter de corriger le hostname (nécessite sudoers rmg_hostname)
     try:
         subprocess.run(
             ['sudo', 'hostnamectl', 'set-hostname', serial],
             capture_output=True, timeout=5
         )
-    except Exception:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
 
     _device_serial = serial
@@ -139,7 +168,7 @@ def get_device_serial():
 
 
 def send_mpv_command(command):
-    """Envoie une commande à MPV via le socket IPC"""
+    """Envoie une commande a MPV via le socket IPC"""
     try:
         import socket
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -147,49 +176,44 @@ def send_mpv_command(command):
         sock.send((json.dumps({"command": command}) + "\n").encode('utf-8'))
         sock.close()
         return True
-    except:
+    except (ConnectionRefusedError, FileNotFoundError, OSError):
         return False
 
 
 def update_mpv_playlist():
-    """Met à jour la playlist MPV sans redémarrer (si possible)"""
+    """Met a jour la playlist MPV sans redemarrer (si possible)"""
     global mpv_process
     if mpv_process is None or mpv_process.poll() is not None:
         restart_mpv()
         return
     try:
         if config.get('single_file_mode') and config.get('selected_file'):
-            selected_path = os.path.join(MEDIA_DIR, config['selected_file'])
-            if os.path.exists(selected_path):
+            selected_path = _safe_filename(config['selected_file'], MEDIA_DIR)
+            if selected_path and os.path.exists(selected_path):
                 send_mpv_command(["loadfile", selected_path, "replace"])
                 send_mpv_command(["set_property", "loop-file", "inf"])
                 time.sleep(0.2)
                 return
         restart_mpv()
-    except:
+    except (ConnectionRefusedError, OSError):
         restart_mpv()
 
 
 def is_media_file(filename):
-    """Vérifie si un fichier est un média valide"""
+    """Verifie si un fichier est un media valide"""
     if filename.startswith('.'):
         return False
-    if filename in ['config.json', 'Thumbs.db', '.DS_Store']:
+    if filename in ('config.json', 'Thumbs.db', '.DS_Store'):
         return False
     ext = os.path.splitext(filename.lower())[1]
-    if ext == '.json':
-        return False
-    return ext in {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
-                   '.heic', '.heif',
-                   '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'}
+    return ext in ALLOWED_EXTENSIONS
 
 
 def generate_lua_script():
-    """Génère le script Lua mpv pour appliquer les durées personnalisées par fichier"""
+    """Genere le script Lua mpv pour appliquer les durees personnalisees par fichier"""
     mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
     os.makedirs(mpv_conf_dir, exist_ok=True)
     script_path = os.path.join(mpv_conf_dir, "per_file_duration.lua")
-    # Utiliser des slashes Unix dans le script Lua (tourne sur Raspberry Pi)
     config_path_lua = CONFIG_FILE.replace('\\', '/')
     lua = "\n".join([
         "-- Script MPV : duree personnalisee par fichier",
@@ -214,18 +238,17 @@ def generate_lua_script():
     try:
         with open(script_path, 'w') as f:
             f.write(lua)
-    except:
+    except (IOError, OSError):
         pass
     return script_path
 
 
 def get_local_ip(retries=8, delay=2.0):
-    """Retourne l'adresse IP locale. Réessaie plusieurs fois pour laisser
-    le réseau s'initialiser au démarrage du Pi."""
+    """Retourne l'adresse IP locale. Reessaie plusieurs fois pour laisser
+    le reseau s'initialiser au demarrage du Pi."""
     import socket as _socket
 
     def _try_udp():
-        """Méthode UDP (pas de paquet réellement envoyé)"""
         s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
         s.settimeout(1)
         s.connect(("8.8.8.8", 80))
@@ -234,11 +257,9 @@ def get_local_ip(retries=8, delay=2.0):
         return ip
 
     def _try_hostname():
-        """Via le hostname local"""
         return _socket.gethostbyname(_socket.gethostname())
 
     def _try_ifconfig():
-        """Lecture directe de l'interface réseau via ip/ifconfig"""
         for cmd in (
             ["ip", "-4", "addr", "show", "scope", "global"],
             ["hostname", "-I"],
@@ -250,12 +271,11 @@ def get_local_ip(retries=8, delay=2.0):
                     if ips:
                         return ips[0]
                 else:
-                    import re
                     ips = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", out)
                     ips = [ip for ip in ips if not ip.startswith("127.")]
                     if ips:
                         return ips[0]
-            except Exception:
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError):
                 pass
         return None
 
@@ -265,7 +285,7 @@ def get_local_ip(retries=8, delay=2.0):
                 ip = method()
                 if ip and not ip.startswith("127.") and ip != "0.0.0.0":
                     return ip
-            except Exception:
+            except (OSError, _socket.error):
                 pass
         if attempt < retries - 1:
             time.sleep(delay)
@@ -273,19 +293,18 @@ def get_local_ip(retries=8, delay=2.0):
 
 
 def generate_welcome_screen():
-    """Génère un écran de bienvenue affichant l'adresse IP pour le premier démarrage.
-    Fond basé sur static/splash.png si disponible (flouté + assombri).
-    Inclut un QR code pointant vers l'interface web si le module qrcode est installé.
-    Retourne le chemin vers l'image PNG générée, ou None en cas d'échec."""
+    """Genere un ecran de bienvenue affichant l'adresse IP pour le premier demarrage.
+    Fond base sur static/splash.png si disponible (floute + assombri).
+    Inclut un QR code pointant vers l'interface web si le module qrcode est installe.
+    Retourne le chemin vers l'image PNG generee, ou None en cas d'echec."""
     welcome_path = os.path.join(MEDIA_DIR, ".welcome_screen.png")
     try:
         from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
         ip = get_local_ip()
-        url = f"http://{ip}:5000"
+        url = f"http://{ip}:{FLASK_PORT}"
         W, H = 1920, 1080
         cx, cy = W // 2, H // 2
 
-        # ── Background : splash.png flouté/assombri, ou fond sombre par défaut ────
         script_dir = os.path.dirname(os.path.abspath(__file__))
         splash_path = os.path.join(script_dir, 'static', 'splash.png')
         if os.path.exists(splash_path):
@@ -294,12 +313,11 @@ def generate_welcome_screen():
                 bg = bg.filter(ImageFilter.GaussianBlur(radius=10))
                 bg = ImageEnhance.Brightness(bg).enhance(0.35)
                 img = bg
-            except Exception:
+            except (IOError, OSError):
                 img = Image.new("RGB", (W, H), color=(10, 10, 26))
         else:
             img = Image.new("RGB", (W, H), color=(10, 10, 26))
 
-        # ── Overlay plein écran semi-transparent 30% ──────────────────────────
         overlay = Image.new('RGBA', (W, H), (0, 0, 0, 77))
         img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
         draw = ImageDraw.Draw(img)
@@ -311,7 +329,7 @@ def generate_welcome_screen():
             ]:
                 try:
                     return ImageFont.truetype(path, size)
-                except Exception:
+                except (IOError, OSError):
                     pass
             return ImageFont.load_default()
 
@@ -324,13 +342,12 @@ def generate_welcome_screen():
         qr_x    = cx - qr_size // 2
         qr_y    = cy + 110
 
-        # ── Texte ───────────────────────────────────────────────────────────────
         try:
             draw.text((cx, cy - 260), "RMG Signage",
                       fill=(255, 255, 255), font=font_title, anchor="mm")
             draw.line([(cx - 340, cy - 188), (cx + 340, cy - 188)],
                       fill=(70, 70, 110), width=2)
-            draw.text((cx, cy - 125), "Aucun média à afficher",
+            draw.text((cx, cy - 125), "Aucun media a afficher",
                       fill=(140, 140, 165), font=font_sub, anchor="mm")
             draw.text((cx, cy - 20), url,
                       fill=(74, 158, 255), font=font_url, anchor="mm")
@@ -341,7 +358,6 @@ def generate_welcome_screen():
             draw.text((50, 220), "Aucun media",  fill=(140, 140, 165), font=font_sub)
             draw.text((50, 380), url,            fill=(74, 158, 255),  font=font_url)
 
-        # ── QR code ─────────────────────────────────────────────────────────────
         try:
             import qrcode as _qrcode
             qr = _qrcode.QRCode(
@@ -350,16 +366,12 @@ def generate_welcome_screen():
             )
             qr.add_data(url)
             qr.make(fit=True)
-            # make_image() retourne un objet PilImage (wrapper qrcode) ;
-            # on récupère le PIL Image sous-jacent via get_image() si disponible,
-            # sinon on force la conversion directement.
             qr_wrapped = qr.make_image(fill_color="black", back_color="white")
             if hasattr(qr_wrapped, 'get_image'):
                 qr_pil = qr_wrapped.get_image().convert('RGB')
             else:
                 qr_pil = qr_wrapped.convert('RGB')
             qr_pil = qr_pil.resize((qr_size, qr_size), Image.NEAREST)
-            # Fond blanc légèrement plus grand pour lisibilité du scanner
             pad = 10
             draw.rectangle(
                 [qr_x - pad, qr_y - pad, qr_x + qr_size + pad, qr_y + qr_size + pad],
@@ -367,7 +379,6 @@ def generate_welcome_screen():
             )
             img.paste(qr_pil, (qr_x, qr_y))
         except ImportError:
-            # qrcode non installé — on répète l'URL à la place
             draw.text((cx, qr_y + qr_size // 2), url,
                       fill=(74, 158, 255), font=font_url, anchor="mm")
 
@@ -375,12 +386,12 @@ def generate_welcome_screen():
         img.save(welcome_path)
         return welcome_path
     except Exception as e:
-        print(f"⚠️  Écran de bienvenue non généré : {e}")
+        print(f"Ecran de bienvenue non genere : {e}")
         return None
 
 
 def get_mpv_cmd():
-    """Génère la commande mpv avec la config actuelle"""
+    """Genere la commande mpv avec la config actuelle"""
     mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
     os.makedirs(mpv_conf_dir, exist_ok=True)
 
@@ -394,19 +405,19 @@ def get_mpv_cmd():
             f.write("border=no\n")
             f.write("osd-bar=no\n")
             f.write("background=0.0/0.0/0.0\n")
-            f.write("panscan=1.0\n")  # Zoom pour remplir l'écran (coupe les bords si rapport différent)
+            f.write("panscan=1.0\n")
             f.write(f"image-display-duration={config['image_duration']}\n")
             f.write(f"video-rotate={config.get('rotation', 0)}\n")
             f.write(f"input-ipc-server={MPV_SOCKET}\n")
-    except:
+    except (IOError, OSError):
         pass
 
     rotation = config.get('rotation', 0)
 
     # Mode fichier unique
     if config.get('single_file_mode') and config.get('selected_file'):
-        selected_path = os.path.join(MEDIA_DIR, config['selected_file'])
-        if os.path.exists(selected_path):
+        selected_path = _safe_filename(config['selected_file'], MEDIA_DIR)
+        if selected_path and os.path.exists(selected_path):
             cmd_single = [MPV_BINARY, f"--config-dir={mpv_conf_dir}"]
             if lua_script:
                 cmd_single.append(f"--script={lua_script}")
@@ -418,18 +429,17 @@ def get_mpv_cmd():
     try:
         all_files = [f for f in os.listdir(MEDIA_DIR)
                      if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)]
-    except:
+    except OSError:
         all_files = []
 
     if not all_files:
-        # Pas de médias : afficher l'écran de bienvenue avec l'adresse IP
         welcome = generate_welcome_screen()
         if welcome and os.path.exists(welcome):
             cmd_welcome = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", welcome]
             return cmd_welcome
         return None
 
-    # Appliquer l'ordre personnalisé si shuffle désactivé
+    # Appliquer l'ordre personnalise si shuffle desactive
     if not config.get('shuffle') and config.get('file_order'):
         order = config['file_order']
         all_set = set(all_files)
@@ -464,19 +474,16 @@ def upload():
         for f in files:
             if not f.filename:
                 continue
-            # Sécuriser le nom de fichier (évite path traversal)
             safe_name = secure_filename(f.filename)
             if not safe_name:
                 continue
-            # Vérifier l'extension
             ext = os.path.splitext(safe_name.lower())[1]
-            if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+            if ext not in ALLOWED_EXTENSIONS:
                 continue
             path = os.path.join(MEDIA_DIR, safe_name)
             f.save(path)
             files_saved += 1
         if files_saved:
-            # Déclencher la mise à jour MPV (remplace l'écran de bienvenue si actif)
             update_mpv_playlist()
         return redirect("/")
 
@@ -485,7 +492,7 @@ def upload():
 
 @app.route("/api/logo", methods=["POST", "DELETE"])
 def manage_logo():
-    """Upload ou suppression du logo (stocké dans static/logo.png)"""
+    """Upload ou suppression du logo (stocke dans static/logo.png)"""
     logo_path = os.path.join(app.root_path, 'static', 'logo.png')
     if request.method == "POST":
         f = request.files.get('logo')
@@ -494,30 +501,30 @@ def manage_logo():
         try:
             os.makedirs(os.path.join(app.root_path, 'static'), exist_ok=True)
             f.save(logo_path)
-            return jsonify({"success": True, "message": "Logo mis à jour"})
-        except Exception as e:
+            return jsonify({"success": True, "message": "Logo mis a jour"})
+        except (IOError, OSError) as e:
             return jsonify({"success": False, "message": str(e)}), 500
 
     # DELETE
     if os.path.exists(logo_path):
         try:
             os.remove(logo_path)
-            return jsonify({"success": True, "message": "Logo supprimé"})
-        except Exception as e:
+            return jsonify({"success": True, "message": "Logo supprime"})
+        except (IOError, OSError) as e:
             return jsonify({"success": False, "message": str(e)}), 500
-    return jsonify({"success": False, "message": "Aucun logo trouvé"}), 404
+    return jsonify({"success": False, "message": "Aucun logo trouve"}), 404
 
 
 # === API ENDPOINTS ===
 
 @app.route("/api/status")
 def get_status():
-    """Retourne l'état actuel de mpv"""
+    """Retourne l'etat actuel de mpv"""
     running = mpv_process is not None and mpv_process.poll() is None
     try:
         media_count = len([f for f in os.listdir(MEDIA_DIR)
                            if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)])
-    except Exception:
+    except OSError:
         media_count = 0
     return jsonify({
         "mpv_running": running,
@@ -534,35 +541,36 @@ def list_files():
                  if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)]
         files.sort()
         return jsonify(files)
-    except:
+    except OSError:
         return jsonify([])
 
 
 @app.route("/media/<filename>")
 def serve_media(filename):
-    return send_from_directory(MEDIA_DIR, filename)
+    safe = secure_filename(filename)
+    if not safe:
+        return jsonify({"success": False, "message": "Nom de fichier invalide"}), 400
+    return send_from_directory(MEDIA_DIR, safe)
 
 
 @app.route("/api/delete/<filename>", methods=["DELETE"])
 def delete_file(filename):
-    try:
-        path = os.path.join(MEDIA_DIR, filename)
-        if os.path.exists(path):
-            os.remove(path)
-            # Nettoyer la durée personnalisée si elle existe
-            if filename in config.get('file_durations', {}):
-                config['file_durations'].pop(filename)
-            # Retirer du file_order
-            if filename in config.get('file_order', []):
-                config['file_order'].remove(filename)
-            try:
-                with open(CONFIG_FILE, 'w') as f:
-                    json.dump(config, f, indent=2)
-            except:
-                pass
-            return jsonify({"success": True, "message": f"{filename} supprimé"})
+    path = _safe_filename(filename, MEDIA_DIR)
+    if not path:
+        return jsonify({"success": False, "message": "Nom de fichier invalide"}), 400
+    if not os.path.exists(path):
         return jsonify({"success": False, "message": "Fichier introuvable"}), 404
-    except Exception as e:
+    try:
+        os.remove(path)
+        safe = secure_filename(filename)
+        with _config_lock:
+            if safe in config.get('file_durations', {}):
+                config['file_durations'].pop(safe)
+            if safe in config.get('file_order', []):
+                config['file_order'].remove(safe)
+            _save_config()
+        return jsonify({"success": True, "message": f"{safe} supprime"})
+    except (IOError, OSError) as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -570,17 +578,19 @@ def delete_file(filename):
 def manage_config():
     global config
     if request.method == "POST":
-        old_config = config.copy()
         data = request.json
-        # Ne pas écraser file_order et file_durations via cet endpoint
-        data.pop('file_order', None)
-        data.pop('file_durations', None)
-        config.update(data)
-        try:
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(config, f)
-        except:
-            pass
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "message": "JSON invalide"}), 400
+
+        with _config_lock:
+            old_config = config.copy()
+            # Ne pas ecraser file_order et file_durations via cet endpoint
+            data.pop('file_order', None)
+            data.pop('file_durations', None)
+            # Whitelist des cles autorisees
+            filtered = {k: v for k, v in data.items() if k in ALLOWED_CONFIG_KEYS}
+            config.update(filtered)
+            _save_config()
 
         if mpv_process and mpv_process.poll() is None:
             if old_config.get('shuffle') != config.get('shuffle'):
@@ -598,45 +608,38 @@ def manage_config():
         else:
             restart_mpv()
 
-        return jsonify({"success": True, "message": "Configuration mise à jour"})
+        return jsonify({"success": True, "message": "Configuration mise a jour"})
     return jsonify(config)
 
 
 @app.route("/api/order", methods=["POST"])
 def save_order():
-    """Sauvegarde l'ordre personnalisé des fichiers"""
+    """Sauvegarde l'ordre personnalise des fichiers"""
     global config
     data = request.json
-    config['file_order'] = data.get('order', [])
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except:
-        pass
+    with _config_lock:
+        config['file_order'] = data.get('order', [])
+        _save_config()
     if not config.get('shuffle'):
         restart_mpv()
-    return jsonify({"success": True, "message": "Ordre sauvegardé"})
+    return jsonify({"success": True, "message": "Ordre sauvegarde"})
 
 
 @app.route("/api/file-duration/<filename>", methods=["POST"])
 def set_file_duration(filename):
-    """Définit la durée d'affichage personnalisée d'un fichier"""
+    """Definit la duree d'affichage personnalisee d'un fichier"""
     global config
     data = request.json
     duration = data.get('duration')
-    if 'file_durations' not in config:
-        config['file_durations'] = {}
-    if duration is None:
-        config['file_durations'].pop(filename, None)
-    else:
-        config['file_durations'][filename] = int(duration)
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except:
-        pass
-    # Le script Lua relit la config à chaque fichier — pas besoin de redémarrer mpv
-    return jsonify({"success": True, "message": f"Durée mise à jour pour {filename}"})
+    with _config_lock:
+        if 'file_durations' not in config:
+            config['file_durations'] = {}
+        if duration is None:
+            config['file_durations'].pop(filename, None)
+        else:
+            config['file_durations'][filename] = int(duration)
+        _save_config()
+    return jsonify({"success": True, "message": f"Duree mise a jour pour {filename}"})
 
 
 @app.route("/api/control/<action>", methods=["POST"])
@@ -644,87 +647,78 @@ def control_mpv(action):
     global mpv_process
     if action == "restart":
         restart_mpv()
-        return jsonify({"success": True, "message": "MPV redémarré"})
+        return jsonify({"success": True, "message": "MPV redemarre"})
     elif action == "stop":
         if mpv_process:
             mpv_process.terminate()
             mpv_process = None
-        return jsonify({"success": True, "message": "MPV arrêté"})
+        return jsonify({"success": True, "message": "MPV arrete"})
     elif action == "next":
         if send_mpv_command(["playlist-next"]):
             return jsonify({"success": True, "message": "Fichier suivant"})
-        return jsonify({"success": False, "message": "Commande échouée"}), 500
+        return jsonify({"success": False, "message": "Commande echouee"}), 500
     elif action == "show-ip":
         welcome = generate_welcome_screen()
         if welcome and os.path.exists(welcome):
             mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
             cmd = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", "--loop-file=inf", welcome]
             restart_mpv(override_cmd=cmd)
-            return jsonify({"success": True, "message": "Écran de connexion affiché"})
-        return jsonify({"success": False, "message": "Impossible de générer l'écran"}), 500
+            return jsonify({"success": True, "message": "Ecran de connexion affiche"})
+        return jsonify({"success": False, "message": "Impossible de generer l'ecran"}), 500
     return jsonify({"success": False, "message": "Action inconnue"}), 400
 
 
 @app.route("/api/play-single/<filename>", methods=["POST"])
 def play_single_file(filename):
     global config
-    path = os.path.join(MEDIA_DIR, filename)
-    if not os.path.exists(path):
+    path = _safe_filename(filename, MEDIA_DIR)
+    if not path or not os.path.exists(path):
         return jsonify({"success": False, "message": "Fichier introuvable"}), 404
-    config['single_file_mode'] = True
-    config['selected_file'] = filename
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except:
-        pass
+    with _config_lock:
+        config['single_file_mode'] = True
+        config['selected_file'] = secure_filename(filename)
+        _save_config()
     update_mpv_playlist()
-    return jsonify({"success": True, "message": f"Affichage de {filename} uniquement"})
+    return jsonify({"success": True, "message": f"Affichage de {secure_filename(filename)} uniquement"})
 
 
 @app.route("/api/play-all", methods=["POST"])
 def play_all_files():
     global config
-    config['single_file_mode'] = False
-    config['selected_file'] = None
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except:
-        pass
+    with _config_lock:
+        config['single_file_mode'] = False
+        config['selected_file'] = None
+        _save_config()
     restart_mpv()
     return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
 
 
 @app.route("/api/update/status", methods=["GET"])
 def update_git_status():
-    """Retourne les informations git actuelles (branche locale + dernier commit de origin/main)"""
-    script_dir = os.environ.get("RMG_SIGNAGE_DIR", "/home/rmg/PhotoFrame")
+    """Retourne les informations git actuelles (branche locale + dernier commit de origin)"""
     try:
-        # État local
         commit = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
         branch = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
         msg = subprocess.check_output(
             [GIT_BINARY, "log", "-1", "--pretty=%s"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
-        # Hash du dernier commit sur origin/<branche> (fetch silencieux)
         try:
             subprocess.check_output(
                 [GIT_BINARY, "fetch", "origin", GIT_BRANCH],
-                cwd=script_dir, stderr=subprocess.STDOUT
+                cwd=PROJECT_DIR, stderr=subprocess.STDOUT
             )
             remote_commit = subprocess.check_output(
                 [GIT_BINARY, "rev-parse", "--short", f"origin/{GIT_BRANCH}"],
-                cwd=script_dir, stderr=subprocess.STDOUT
+                cwd=PROJECT_DIR, stderr=subprocess.STDOUT
             ).decode().strip()
-        except Exception:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             remote_commit = None
         return jsonify({
             "success": True,
@@ -737,47 +731,43 @@ def update_git_status():
         })
     except subprocess.CalledProcessError as e:
         return jsonify({"success": False, "message": e.output.decode().strip()})
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
         return jsonify({"success": False, "message": str(e)})
 
 
 @app.route("/api/update", methods=["POST"])
 def update_from_github():
-    """Bascule sur main, aligne sur origin/main et redémarre si nécessaire"""
-    script_dir = os.environ.get("RMG_SIGNAGE_DIR", "/home/rmg/PhotoFrame")
+    """Bascule sur la branche cible, aligne sur origin et redemarre si necessaire"""
     try:
         before = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
 
-        # 1. Récupérer origin/<branche>
         fetch_out = subprocess.check_output(
             [GIT_BINARY, "fetch", "origin", GIT_BRANCH],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
 
-        # 2. Basculer sur la branche cible si nécessaire
         current_branch = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
         checkout_out = ""
         if current_branch != GIT_BRANCH:
             checkout_out = subprocess.check_output(
                 [GIT_BINARY, "checkout", GIT_BRANCH],
-                cwd=script_dir, stderr=subprocess.STDOUT
+                cwd=PROJECT_DIR, stderr=subprocess.STDOUT
             ).decode().strip()
 
-        # 3. Aligner strictement sur origin/<branche> (ignore toute modif locale)
         reset_out = subprocess.check_output(
             [GIT_BINARY, "reset", "--hard", f"origin/{GIT_BRANCH}"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
 
         after = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
 
         output_lines = [l for l in [fetch_out, checkout_out, reset_out] if l]
@@ -785,9 +775,10 @@ def update_from_github():
 
         updated = before != after
         if updated:
+            svc = SERVICE_NAME
             def delayed_restart():
                 time.sleep(1.5)
-                subprocess.Popen(["sudo", "systemctl", "restart", "rmg_signage"])
+                subprocess.Popen(["sudo", "systemctl", "restart", svc])
             threading.Thread(target=delayed_restart, daemon=True).start()
 
         return jsonify({
@@ -797,35 +788,33 @@ def update_from_github():
             "before": before,
             "after": after,
             "output": pull_out,
-            "message": "Mise à jour effectuée, redémarrage en cours…" if updated else "Déjà à jour"
+            "message": "Mise a jour effectuee, redemarrage en cours..." if updated else "Deja a jour"
         })
     except subprocess.CalledProcessError as e:
         return jsonify({"success": False, "message": e.output.decode().strip()}), 500
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 
 def start_flask():
-    # use_reloader=False évite le double fork qui casserait le thread MPV
-    # threaded=True permet les requêtes concurrentes
     app.run(host="0.0.0.0", port=FLASK_PORT, threaded=True, use_reloader=False)
 
 
 def start_mpv(override_cmd=None):
-    """Lance MPV avec la config actuelle (ou une commande spécifique si override_cmd)"""
+    """Lance MPV avec la config actuelle (ou une commande specifique si override_cmd)"""
     global mpv_process
-    # Délai de 4s : laisse le splash (mpv DRM) être tué par le watcher de
-    # splash_helper.sh et libérer le device DRM avant que ce mpv ne démarre.
+    # Delai : laisse le splash (mpv DRM) etre tue par le watcher de
+    # splash_helper.sh et liberer le device DRM avant que ce mpv ne demarre.
     time.sleep(4)
     os.makedirs(MEDIA_DIR, exist_ok=True)
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-    except Exception:
+    except (IOError, OSError):
         pass
 
     cmd = override_cmd or get_mpv_cmd()
     if cmd is None:
-        print("⚠️ Aucun fichier média trouvé dans", MEDIA_DIR)
+        print("Aucun fichier media trouve dans", MEDIA_DIR)
         print("   En attente de fichiers...")
         while True:
             time.sleep(5)
@@ -835,15 +824,11 @@ def start_mpv(override_cmd=None):
 
     extra_list = shlex.split(MPV_EXTRA_ARGS) if MPV_EXTRA_ARGS else []
     user_has_vo = any(a.startswith("--vo=") for a in extra_list)
-    # --vo=gpu : backend moderne, détecte automatiquement X11 ou Wayland
-    # --vo=drm : framebuffer direct (sans serveur graphique)
-    # --vo=sdl : fallback universel
     vo_candidates = [[]] if user_has_vo else [["--vo=gpu"], ["--vo=drm"], ["--vo=sdl"]]
 
     last_exception = None
     for vo_args in vo_candidates:
         attempt_cmd = list(cmd)
-        # Ensure --config-dir is passed immediately after the mpv binary
         config_arg = None
         rest_args = attempt_cmd[1:]
         for a in attempt_cmd[1:]:
@@ -859,9 +844,10 @@ def start_mpv(override_cmd=None):
         try:
             with open(LOG_FILE, "ab") as logf:
                 logf.write(("\n\n--- Starting mpv: %s ---\n" % " ".join(new_cmd)).encode('utf-8'))
-        except Exception:
+        except (IOError, OSError):
             pass
 
+        logf = None
         try:
             logf = open(LOG_FILE, "ab")
             proc = subprocess.Popen(new_cmd, stdout=logf, stderr=logf)
@@ -871,61 +857,55 @@ def start_mpv(override_cmd=None):
                 try:
                     proc.wait()
                 finally:
-                    try:
-                        logf.close()
-                    except Exception:
-                        pass
+                    logf.close()
                 return
             else:
-                try:
-                    logf.write((f"mpv exited quickly with code={proc.returncode}\n").encode('utf-8'))
-                    logf.close()
-                except Exception:
-                    pass
+                logf.write((f"mpv exited quickly with code={proc.returncode}\n").encode('utf-8'))
+                logf.close()
                 last_exception = RuntimeError(f"mpv exited with code {proc.returncode}")
                 continue
-        except Exception as e:
+        except (IOError, OSError) as e:
             last_exception = e
-            try:
-                with open(LOG_FILE, "ab") as logf:
+            if logf:
+                try:
                     logf.write((f"Exception launching mpv: {e}\n").encode('utf-8'))
-            except Exception:
-                pass
+                    logf.close()
+                except (IOError, OSError):
+                    pass
             continue
 
-    print("⚠️ Impossible de lancer MPV — consultez", LOG_FILE)
+    print("Impossible de lancer MPV -- consultez", LOG_FILE)
     if last_exception:
         try:
             with open(LOG_FILE, "ab") as logf:
                 logf.write((f"Final error: {last_exception}\n").encode('utf-8'))
-        except Exception:
+        except (IOError, OSError):
             pass
     mpv_process = None
 
 
 def restart_mpv(override_cmd=None):
-    """Redémarre MPV (protégé par verrou pour éviter les lancements multiples)"""
+    """Redemarre MPV (protege par verrou pour eviter les lancements multiples)"""
     global mpv_process
     if not _mpv_lock.acquire(blocking=False):
-        # Un redémarrage est déjà en cours
         return
     try:
-        # Blackout tty1 AVANT de tuer mpv : quand mpv libère le DRM, la VT
-        # sous-jacente affiche déjà un fond noir avec curseur masqué.
         try:
             with open('/dev/tty1', 'wb') as _tty:
                 _tty.write(b'\033[?25l\033[40m\033[2J\033[H')
-        except Exception:
+        except (IOError, OSError):
             pass
         if mpv_process:
             try:
                 mpv_process.terminate()
                 mpv_process.wait(timeout=2)
-            except Exception:
+            except subprocess.TimeoutExpired:
                 try:
                     mpv_process.kill()
-                except Exception:
+                except OSError:
                     pass
+            except OSError:
+                pass
         mpv_process = None
     finally:
         _mpv_lock.release()
@@ -934,22 +914,17 @@ def restart_mpv(override_cmd=None):
 
 if __name__ == "__main__":
     os.makedirs(MEDIA_DIR, exist_ok=True)
-    # Initialisation du serial dès le démarrage (corrige le hostname si nécessaire)
-    print(f"🔑 Numéro de série : {get_device_serial()}")
+    print(f"Numero de serie : {get_device_serial()}")
 
     if not os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f, indent=2)
-            print(f"✅ Fichier de configuration créé : {CONFIG_FILE}")
-        except Exception as e:
-            print(f"⚠️ Impossible de créer config.json : {e}")
+            print(f"Fichier de configuration cree : {CONFIG_FILE}")
+        except (IOError, OSError) as e:
+            print(f"Impossible de creer config.json : {e}")
 
-    # MPV tourne en thread daemon : quand restart_mpv() le tue, proc.wait() retourne
-    # et le thread s'arrête proprement sans emporter toute l'application.
     mpv_thread = threading.Thread(target=start_mpv, daemon=True)
     mpv_thread.start()
 
-    # Flask bloque le thread principal (non-daemon) → le processus reste en vie
-    # même après un redémarrage mpv.
     start_flask()

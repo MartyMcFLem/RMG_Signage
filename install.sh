@@ -115,10 +115,15 @@ else
   echo "  → Hostname déjà correct : $NEW_HOSTNAME"
 fi
 
-# Autoriser le service à corriger le hostname si nécessaire (fallback Flask)
+# Autoriser le service a corriger le hostname et redemarrer le service
+rm -f /etc/sudoers.d/rmg_hostname 2>/dev/null || true
 HOSTNAMECTL_PATH=$(command -v hostnamectl 2>/dev/null || echo "/usr/bin/hostnamectl")
-echo "$SERVICE_USER ALL=(ALL) NOPASSWD: $HOSTNAMECTL_PATH" > /etc/sudoers.d/rmg_hostname
-chmod 440 /etc/sudoers.d/rmg_hostname
+SYSTEMCTL_PATH=$(command -v systemctl 2>/dev/null || echo "/usr/bin/systemctl")
+cat > /etc/sudoers.d/rmg_signage << SUDOEOF
+$SERVICE_USER ALL=(ALL) NOPASSWD: $HOSTNAMECTL_PATH
+$SERVICE_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH restart $SERVICE_NAME
+SUDOEOF
+chmod 440 /etc/sudoers.d/rmg_signage
 
 # ─── 3. Dossiers et permissions
 echo "[3/6] Création des dossiers..."
@@ -189,6 +194,7 @@ Environment=RMG_SIGNAGE_MEDIA_DIR=$MEDIA_DIR
 Environment=RMG_SIGNAGE_LOG=$LOG_FILE
 Environment=RMG_SIGNAGE_BRANCH=$BRANCH
 Environment=RMG_SIGNAGE_PORT=$PORT
+Environment=RMG_SIGNAGE_SERVICE=$SERVICE_NAME
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
 ExecStartPre=+/bin/bash $PROJECT_DIR/splash_helper.sh start
