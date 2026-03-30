@@ -785,48 +785,85 @@ function selectWidget(wId) {
 }
 
 /* ── Canvas ──────────────────────────────────────── */
+// 8 resize handles: corners + edges
+const HANDLE_DEFS = [
+  ['nw', 'top:0;left:0;transform:translate(-50%,-50%);cursor:nwse-resize'],
+  ['n',  'top:0;left:50%;transform:translate(-50%,-50%);cursor:ns-resize'],
+  ['ne', 'top:0;right:0;transform:translate(50%,-50%);cursor:nesw-resize'],
+  ['e',  'top:50%;right:0;transform:translate(50%,-50%);cursor:ew-resize'],
+  ['se', 'bottom:0;right:0;transform:translate(50%,50%);cursor:nwse-resize'],
+  ['s',  'bottom:0;left:50%;transform:translate(-50%,50%);cursor:ns-resize'],
+  ['sw', 'bottom:0;left:0;transform:translate(-50%,50%);cursor:nesw-resize'],
+  ['w',  'top:50%;left:0;transform:translate(-50%,-50%);cursor:ew-resize'],
+];
+
 function renderCanvas() {
   const canvas = document.getElementById('pbCanvas');
   const bg = document.getElementById('pbBgColor').value;
   canvas.style.background = bg;
+  canvas.style.overflow = 'visible';
 
-  // Remove old widget rects (keep drag listeners)
   [...canvas.querySelectorAll('.pb-widget')].forEach(e => e.remove());
 
+  const labels = {clock:'⏰ Horloge',text:'💬 Texte',weather:'🌤 Météo',
+                  media:'🖼 Média',ticker:'📰 Ticker',background:'🎨 Fond'};
+
   for (const w of _pbWidgets) {
-    if (w.type === 'background') continue; // background is just the canvas color
+    if (w.type === 'background') continue;
+    const color = WIDGET_COLORS[w.type] || '#888';
+    const selected = w.id === _pbSelected;
+
     const el = document.createElement('div');
     el.className = 'pb-widget';
     el.dataset.wid = w.id;
-    const color = WIDGET_COLORS[w.type] || '#888';
-    const selected = w.id === _pbSelected;
-    el.style.cssText = `
-      position:absolute;
-      left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;
-      background:${color}22;
-      border:2px ${selected ? 'solid' : 'dashed'} ${color};
-      border-radius:4px;
-      display:flex;align-items:center;justify-content:center;
-      font-size:11px;color:${color};text-align:center;
-      cursor:move;box-sizing:border-box;
-      ${selected ? 'box-shadow:0 0 0 2px ' + color + '66;' : ''}
-    `;
-    const labels = {clock:'⏰ Horloge',text:'💬 Texte',weather:'🌤 Météo',media:'🖼 Média',ticker:'📰 Ticker',background:'🎨 Fond'};
+    el.style.cssText = [
+      'position:absolute;overflow:visible;',
+      `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`,
+      `background:${color}22;`,
+      `border:2px ${selected ? 'solid' : 'dashed'} ${color};`,
+      'border-radius:4px;display:flex;align-items:center;justify-content:center;',
+      'font-size:11px;text-align:center;cursor:move;box-sizing:border-box;',
+      `color:${color};`,
+      selected ? `box-shadow:0 0 0 2px ${color}66;` : '',
+    ].join('');
     el.innerHTML = `<span style="pointer-events:none;padding:4px;overflow:hidden;max-width:90%;">${labels[w.type]||w.type}</span>`;
 
-    // Click to select
+    // Move: mousedown on the widget body (not on a handle)
     el.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('pb-rh')) return;
       e.stopPropagation();
       selectWidget(w.id);
-      // Start drag
       const rect = canvas.getBoundingClientRect();
       _pbDrag = {
-        wId: w.id,
+        wId: w.id, mode: 'move',
         startX: e.clientX, startY: e.clientY,
-        origX: w.x, origY: w.y,
+        origX: w.x, origY: w.y, origW: w.w, origH: w.h,
         cw: rect.width, ch: rect.height,
       };
     });
+
+    // Resize handles (only for selected widget)
+    if (selected) {
+      for (const [handle, css] of HANDLE_DEFS) {
+        const h = document.createElement('div');
+        h.className = 'pb-rh';
+        h.style.cssText = 'position:absolute;width:9px;height:9px;' +
+          'background:#fff;border:1.5px solid #555;border-radius:2px;z-index:10;' + css;
+        h.addEventListener('mousedown', e => {
+          e.stopPropagation();
+          e.preventDefault();
+          const rect = canvas.getBoundingClientRect();
+          _pbDrag = {
+            wId: w.id, mode: 'resize', handle,
+            startX: e.clientX, startY: e.clientY,
+            origX: w.x, origY: w.y, origW: w.w, origH: w.h,
+            cw: rect.width, ch: rect.height,
+          };
+        });
+        el.appendChild(h);
+      }
+    }
+
     canvas.appendChild(el);
   }
 }
@@ -835,20 +872,41 @@ function renderCanvas() {
 document.addEventListener('mousemove', e => {
   if (!_pbDrag) return;
   const d = _pbDrag;
-  const dx = ((e.clientX - d.startX) / d.cw) * 100;
-  const dy = ((e.clientY - d.startY) / d.ch) * 100;
+  const rawDx = ((e.clientX - d.startX) / d.cw) * 100;
+  const rawDy = ((e.clientY - d.startY) / d.ch) * 100;
   const w = _pbWidgets.find(w => w.id === d.wId);
   if (!w) return;
-  w.x = Math.max(0, Math.min(100 - w.w, d.origX + dx));
-  w.y = Math.max(0, Math.min(100 - w.h, d.origY + dy));
-  // Live update position of the element without full re-render
-  const el = document.querySelector(`.pb-widget[data-wid="${d.wId}"]`);
-  if (el) { el.style.left = w.x + '%'; el.style.top = w.y + '%'; }
-  // Update position inputs in props panel
-  const px = document.getElementById('pb-prop-x');
-  const py = document.getElementById('pb-prop-y');
-  if (px) px.value = Math.round(w.x);
-  if (py) py.value = Math.round(w.y);
+
+  if (d.mode === 'move') {
+    w.x = Math.max(0, Math.min(100 - w.w, snapVal(d.origX + rawDx)));
+    w.y = Math.max(0, Math.min(100 - w.h, snapVal(d.origY + rawDy)));
+    const el = document.querySelector(`.pb-widget[data-wid="${d.wId}"]`);
+    if (el) { el.style.left = w.x + '%'; el.style.top = w.y + '%'; }
+    const px = document.getElementById('pb-prop-x'), py = document.getElementById('pb-prop-y');
+    if (px) px.value = Math.round(w.x);
+    if (py) py.value = Math.round(w.y);
+
+  } else if (d.mode === 'resize') {
+    let nx = d.origX, ny = d.origY, nw = d.origW, nh = d.origH;
+    const h = d.handle;
+    if (h.includes('e')) nw = Math.max(SNAP_GRID, snapVal(d.origW + rawDx));
+    if (h.includes('w')) { nw = Math.max(SNAP_GRID, snapVal(d.origW - rawDx)); nx = snapVal(d.origX + rawDx); }
+    if (h.includes('s')) nh = Math.max(SNAP_GRID, snapVal(d.origH + rawDy));
+    if (h.includes('n')) { nh = Math.max(SNAP_GRID, snapVal(d.origH - rawDy)); ny = snapVal(d.origY + rawDy); }
+    // Clamp to canvas bounds
+    if (nx < 0) { nw += nx; nx = 0; }
+    if (ny < 0) { nh += ny; ny = 0; }
+    if (nx + nw > 100) nw = 100 - nx;
+    if (ny + nh > 100) nh = 100 - ny;
+    nw = Math.max(SNAP_GRID, nw); nh = Math.max(SNAP_GRID, nh);
+    w.x = nx; w.y = ny; w.w = nw; w.h = nh;
+    const el = document.querySelector(`.pb-widget[data-wid="${d.wId}"]`);
+    if (el) { el.style.left = nx+'%'; el.style.top = ny+'%'; el.style.width = nw+'%'; el.style.height = nh+'%'; }
+    const px = document.getElementById('pb-prop-x'), py = document.getElementById('pb-prop-y');
+    const pw = document.getElementById('pb-prop-w'), ph = document.getElementById('pb-prop-h');
+    if (px) px.value = Math.round(nx); if (py) py.value = Math.round(ny);
+    if (pw) pw.value = Math.round(nw); if (ph) ph.value = Math.round(nh);
+  }
 });
 document.addEventListener('mouseup', () => { _pbDrag = null; });
 
