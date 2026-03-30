@@ -634,7 +634,7 @@ async function loadPages() {
         <div class="pl-icon">${isActive ? '&#9654;' : '&#9718;'}</div>
         <div class="pl-info">
           <div class="pl-name">${p.name}</div>
-          <div class="pl-meta">${(p.widgets||[]).length} widget${(p.widgets||[]).length>1?'s':''} &middot; ${p.duration}s${rotLabel}${isActive ? ' &middot; Lecture seule' : ''}</div>
+          <div class="pl-meta">${(p.widgets||[]).length} widget${(p.widgets||[]).length>1?'s':''}${rotLabel}${isActive ? ' &middot; Lecture seule' : ''}</div>
         </div>
         <div class="pl-actions">
           ${isActive
@@ -692,7 +692,6 @@ function openPageBuilder(pageId) {
     const p = _pages.find(p => p.id === pageId);
     if (p) {
       document.getElementById('pbName').value = p.name;
-      document.getElementById('pbDuration').value = p.duration;
       document.getElementById('pbBgColor').value = p.bg_color || '#1a1a2e';
       document.getElementById('pbRotation').value = String(p.rotation || 0);
       _pbWidgets = JSON.parse(JSON.stringify(p.widgets || []));
@@ -700,7 +699,6 @@ function openPageBuilder(pageId) {
     }
   } else {
     document.getElementById('pbName').value = '';
-    document.getElementById('pbDuration').value = 15;
     document.getElementById('pbBgColor').value = '#1a1a2e';
     document.getElementById('pbRotation').value = '0';
   }
@@ -763,10 +761,9 @@ async function removePageBgImage() {
 async function savePageBuilder() {
   const name = document.getElementById('pbName').value.trim();
   if (!name) { showToast('Entrez un nom de page'); return; }
-  const duration = parseInt(document.getElementById('pbDuration').value) || 15;
   const bg_color = document.getElementById('pbBgColor').value;
   const rotation = parseInt(document.getElementById('pbRotation').value) || 0;
-  const payload = {name, duration, bg_color, rotation, widgets: _pbWidgets};
+  const payload = {name, bg_color, rotation, widgets: _pbWidgets};
   try {
     if (_editPageId) {
       await fetch('/api/pages/' + _editPageId, {

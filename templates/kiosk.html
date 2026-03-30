@@ -209,14 +209,10 @@ function buildPagesList(state) {
 
 function showSignagePage(pageItem) {
   hideAll();
-  clearTimeout(_timer);
   signageEl.src = '/signage/' + pageItem.id + '?t=' + Date.now();
   signageEl.style.display = 'block';
-  _timer = setTimeout(() => {
-    signageEl.style.display = 'none';
-    signageEl.src = '';
-    advanceFromPage();
-  }, (pageItem.duration || 15) * 1000);
+  // Pas de timer : la page reste affichée jusqu'au prochain changement de génération
+  // ou jusqu'à un événement "suivant" déclenché depuis l'interface.
 }
 
 function advanceFromPage() {
