@@ -191,8 +191,9 @@ function buildMedia(w) {
   el.innerHTML = `
     <img  class="w-mimg" style="object-fit:${fit};display:none" src="" alt="">
     <video class="w-mvid" style="object-fit:${fit};display:none" src="" muted autoplay playsinline></video>`;
-  el.dataset.fit  = fit;
-  el.dataset.dur  = cfg.duration || 8;
+  el.dataset.fit     = fit;
+  el.dataset.dur     = cfg.duration || 8;
+  el.dataset.srcType = cfg.source_type || 'all';
   return el;
 }
 
@@ -331,15 +332,20 @@ async function loadWeather(el) {
 }
 
 /* ── Media widget ─────────────────────────────────── */
-let _mediaFiles = null;
-
-async function getMediaFiles() {
-  if (_mediaFiles) return _mediaFiles;
+async function getFilesForWidget(el) {
+  const srcType = el.dataset.srcType || 'all';
   try {
+    if (srcType.startsWith('pl:')) {
+      const plId = srcType.slice(3);
+      const resp = await fetch('/api/playlists/' + plId);
+      if (!resp.ok) throw new Error('playlist 404');
+      const pl = await resp.json();
+      return pl.files || [];
+    }
+    // default: all files
     const resp = await fetch('/api/files');
-    if (resp.ok) _mediaFiles = await resp.json();
-  } catch (_) {}
-  return _mediaFiles || [];
+    return resp.ok ? await resp.json() : [];
+  } catch (_) { return []; }
 }
 
 function startMediaWidget(el) {
@@ -375,7 +381,7 @@ function startMediaWidget(el) {
     }
   }
 
-  getMediaFiles().then(f => {
+  getFilesForWidget(el).then(f => {
     files = f;
     if (files.length) showNext();
   });

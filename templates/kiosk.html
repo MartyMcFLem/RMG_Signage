@@ -50,51 +50,53 @@
     #ip-overlay {
       display: none;
       position: fixed;
-      inset: 0;
-      z-index: 100;
-      background: rgba(0, 0, 0, 0.88);
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      z-index: 200;
+      background: #000;
       align-items: center;
       justify-content: center;
       flex-direction: column;
-      gap: 28px;
+      gap: 3vmin;
       font-family: 'DejaVu Sans', sans-serif;
       color: #fff;
       text-align: center;
+      padding: 5vmin;
     }
     #ip-overlay.visible { display: flex; }
     #ip-overlay h1 {
-      font-size: 2.2em;
+      font-size: 4vmin;
       font-weight: bold;
       color: #aab4ff;
       letter-spacing: 0.04em;
       margin: 0;
     }
     #ip-overlay .ip-url {
-      font-size: 3.2em;
+      font-size: 6vmin;
       font-weight: bold;
       color: #4a9eff;
       letter-spacing: 0.02em;
     }
     #ip-overlay .ip-hint {
-      font-size: 1.2em;
-      color: #888;
+      font-size: 2.5vmin;
+      color: #aaa;
     }
     #ip-overlay .qr-box {
       background: #fff;
-      padding: 16px;
-      border-radius: 12px;
+      padding: 2vmin;
+      border-radius: 2vmin;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     #ip-overlay .qr-box img {
-      width: 220px;
-      height: 220px;
+      width: 24vmin;
+      height: 24vmin;
       image-rendering: pixelated;
     }
     #ip-overlay .ip-countdown {
-      font-size: 0.95em;
-      color: #555;
+      font-size: 2vmin;
+      color: #666;
     }
   </style>
 </head>

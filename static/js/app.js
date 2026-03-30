@@ -593,11 +593,12 @@ async function savePlModal() {
 }
 
 // ── Pages de signage ──────────────────────────────────
-let _pages       = [];
-let _editPageId  = null;   // null = création, string = édition
-let _pbWidgets   = [];     // widgets en cours d'édition
-let _pbSelected  = null;   // id du widget sélectionné dans le canvas
-let _pbDrag      = null;   // état du drag {wId, startX, startY, origX, origY}
+let _pages           = [];
+let _editPageId      = null;   // null = création, string = édition
+let _pbWidgets       = [];     // widgets en cours d'édition
+let _pbSelected      = null;   // id du widget sélectionné dans le canvas
+let _pbDrag          = null;   // état du drag {wId, startX, startY, origX, origY}
+let _builderPlaylists = [];    // playlists chargées pour le widget média
 const WIDGET_COLORS = {
   background:'#6366f1', clock:'#2563eb', text:'#16a34a',
   weather:'#ea580c', media:'#0891b2', ticker:'#7c3aed',
@@ -702,6 +703,10 @@ function openPageBuilder(pageId) {
 
   // Sync canvas bg with color picker
   document.getElementById('pbBgColor').oninput = () => renderCanvas();
+  // Pre-fetch playlists for media widget source picker
+  fetch('/api/playlists').then(r => r.json()).then(data => {
+    _builderPlaylists = data.playlists || [];
+  }).catch(() => { _builderPlaylists = []; });
   document.getElementById('pageBuilder').style.display = 'block';
   renderCanvas();
 }
@@ -892,7 +897,15 @@ function renderWidgetProps() {
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
       <div class="prop-row"><label>Taille temp px</label><input type="number" value="${c.temp_font_size||72}" min="10" max="300" onchange="_pbSetC('temp_font_size',+this.value)"></div>`;
   } else if (w.type === 'media') {
+    const srcType = c.source_type || 'all';
+    const plOptions = [
+      `<option value="all" ${srcType==='all'?'selected':''}>Tous les médias</option>`,
+      ..._builderPlaylists.map(p =>
+        `<option value="pl:${p.id}" ${srcType==='pl:'+p.id?'selected':''}>${p.name}</option>`
+      )
+    ].join('');
     typeFields = `
+      <div class="prop-row"><label>Source</label><select onchange="_pbSetC('source_type',this.value)">${plOptions}</select></div>
       <div class="prop-row"><label>Ajustement</label><select onchange="_pbSetC('fit',this.value)"><option value="contain" ${c.fit!=='cover'?'selected':''}>Contain</option><option value="cover" ${c.fit==='cover'?'selected':''}>Cover</option></select></div>
       <div class="prop-row"><label>Durée img (s)</label><input type="number" value="${c.duration||8}" min="1" max="300" onchange="_pbSetC('duration',+this.value)"></div>`;
   } else if (w.type === 'ticker') {
