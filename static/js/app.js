@@ -59,9 +59,9 @@ async function loadDashboard() {
       _safe('/api/license'),
     ]);
 
-    const playerEl = document.getElementById('dashMpvStatus');
-    const playerSub = document.getElementById('dashMpvSub');
-    const isRunning = status.player_running ?? status.mpv_running;
+    const playerEl = document.getElementById('dashPlayerStatus');
+    const playerSub = document.getElementById('dashPlayerSub');
+    const isRunning = status.player_running;
     if (isRunning) {
       playerEl.innerHTML = '<span class="status-dot on"></span>Actif';
       playerSub.textContent = status.media_count + ' medias charges';
@@ -79,7 +79,6 @@ async function loadDashboard() {
     document.getElementById('dashLicenseSub').textContent = qMb >= 1024 ? (qMb/1024).toFixed(0) + ' Go alloues' : qMb + ' Mo alloues';
 
     if (status.serial) {
-      document.getElementById('navSerial').textContent = status.serial.replace('rmg-sign-','').substring(0,8) + '...';
       document.getElementById('navSerialFull').textContent = status.serial;
     }
     if (status.version) {
@@ -113,8 +112,7 @@ async function loadDashboard() {
     const dot = document.getElementById('playerDot');
     const pLabel = document.getElementById('playerLabel');
     const pTitle = document.getElementById('playerTitle');
-    const isRunning2 = status.player_running ?? status.mpv_running;
-    if (isRunning2) {
+    if (isRunning) {
       dot.className = 'player-now-dot on';
       pLabel.textContent = 'En lecture';
       pTitle.textContent = status.media_count + ' media' + (status.media_count > 1 ? 's' : '') + ' en rotation';
@@ -598,6 +596,7 @@ let _editPageId      = null;   // null = création, string = édition
 let _pbWidgets       = [];     // widgets en cours d'édition
 let _pbSelected      = null;   // id du widget sélectionné dans le canvas
 let _pbDrag          = null;   // état du drag {wId, mode, handle, startX, startY, origX, origY, origW, origH, cw, ch}
+let _bgImageUrl      = null;   // URL de l'image de fond de la page en cours d'édition
 let _builderPlaylists = [];    // playlists chargées pour le widget média
 const SNAP_GRID = 2.5;         // taille de grille (écran % de la taille totale)
 const snapVal = v => Math.round(v / SNAP_GRID) * SNAP_GRID;
@@ -686,6 +685,7 @@ function openPageBuilder(pageId) {
   _editPageId = pageId || null;
   _pbWidgets = [];
   _pbSelected = null;
+  _bgImageUrl = null;
 
   if (pageId) {
     const p = _pages.find(p => p.id === pageId);
@@ -695,6 +695,7 @@ function openPageBuilder(pageId) {
       document.getElementById('pbBgColor').value = p.bg_color || '#1a1a2e';
       document.getElementById('pbRotation').value = String(p.rotation || 0);
       _pbWidgets = JSON.parse(JSON.stringify(p.widgets || []));
+      _bgImageUrl = p.bg_image || null;
     }
   } else {
     document.getElementById('pbName').value = '';
@@ -702,6 +703,8 @@ function openPageBuilder(pageId) {
     document.getElementById('pbBgColor').value = '#1a1a2e';
     document.getElementById('pbRotation').value = '0';
   }
+  const removeBtn = document.getElementById('pbBgImageRemoveBtn');
+  if (removeBtn) removeBtn.style.display = _bgImageUrl ? '' : 'none';
 
   // Sync canvas bg with color picker
   document.getElementById('pbBgColor').oninput = () => renderCanvas();
@@ -718,6 +721,38 @@ function closePageBuilder() {
   _editPageId = null;
   _pbWidgets = [];
   _pbSelected = null;
+  _bgImageUrl = null;
+}
+
+async function uploadPageBgImage(files) {
+  if (!files || !files.length) return;
+  if (!_editPageId) { showToast('Enregistrez d\'abord la page'); return; }
+  const fd = new FormData();
+  fd.append('image', files[0]);
+  document.getElementById('pbBgImageInput').value = '';
+  try {
+    const res = await fetch('/api/pages/' + _editPageId + '/bg-image', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      _bgImageUrl = data.url + '?v=' + Date.now();
+      renderCanvas();
+      document.getElementById('pbBgImageRemoveBtn').style.display = '';
+      showToast('Image de fond mise à jour');
+    } else {
+      showToast('Erreur : ' + data.message);
+    }
+  } catch(e) { showToast('Erreur réseau'); }
+}
+
+async function removePageBgImage() {
+  if (!_editPageId) return;
+  try {
+    await fetch('/api/pages/' + _editPageId + '/bg-image', { method: 'DELETE' });
+    _bgImageUrl = null;
+    renderCanvas();
+    document.getElementById('pbBgImageRemoveBtn').style.display = 'none';
+    showToast('Image de fond supprimée');
+  } catch(e) { showToast('Erreur réseau'); }
 }
 
 /* ── Save ────────────────────────────────────────── */
@@ -800,8 +835,27 @@ const HANDLE_DEFS = [
 function renderCanvas() {
   const canvas = document.getElementById('pbCanvas');
   const bg = document.getElementById('pbBgColor').value;
-  canvas.style.background = bg;
+  canvas.style.backgroundColor = bg;
+  canvas.style.backgroundImage = [
+    'linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)',
+    'linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px)',
+  ].join(',');
+  canvas.style.backgroundSize = `${SNAP_GRID}% ${SNAP_GRID}%`;
   canvas.style.overflow = 'visible';
+
+  // Image de fond : div absolue sous les widgets
+  let bgImgEl = canvas.querySelector('.pb-bg-img');
+  if (_bgImageUrl) {
+    if (!bgImgEl) {
+      bgImgEl = document.createElement('div');
+      bgImgEl.className = 'pb-bg-img';
+      bgImgEl.style.cssText = 'position:absolute;inset:0;pointer-events:none;background-size:cover;background-position:center;background-repeat:no-repeat;';
+      canvas.prepend(bgImgEl);
+    }
+    bgImgEl.style.backgroundImage = `url(${_bgImageUrl})`;
+  } else if (bgImgEl) {
+    bgImgEl.remove();
+  }
 
   [...canvas.querySelectorAll('.pb-widget')].forEach(e => e.remove());
 

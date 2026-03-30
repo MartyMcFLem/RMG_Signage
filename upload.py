@@ -666,7 +666,6 @@ def get_status():
         media_count = 0
     storage = get_storage_info()
     return jsonify({
-        "mpv_running": running,   # conservé pour compatibilité avec l'interface web existante
         "player_running": running,
         "media_count": media_count,
         "media_dir": MEDIA_DIR,
@@ -1197,6 +1196,61 @@ def update_page(page_id):
     return jsonify({"success": True, "page": page})
 
 
+@app.route("/api/pages/<page_id>/bg-image", methods=["POST", "DELETE"])
+def page_bg_image(page_id):
+    """Upload ou suppression de l'image de fond d'une page."""
+    global config
+    pages = config.get("pages", [])
+    page = next((p for p in pages if p["id"] == page_id), None)
+    if not page:
+        return jsonify({"success": False, "message": "Page introuvable"}), 404
+
+    bg_dir = os.path.join(app.root_path, 'static', 'page_bg')
+    os.makedirs(bg_dir, exist_ok=True)
+
+    if request.method == "POST":
+        f = request.files.get('image')
+        if not f or not f.filename:
+            return jsonify({"success": False, "message": "Pas de fichier"}), 400
+        ext = os.path.splitext(secure_filename(f.filename))[1].lower()
+        if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
+            return jsonify({"success": False, "message": "Format non supporté"}), 400
+        # Supprimer l'ancienne image de fond si elle existe
+        for old in os.listdir(bg_dir):
+            if old.startswith(page_id + '.'):
+                try:
+                    os.remove(os.path.join(bg_dir, old))
+                except OSError:
+                    pass
+        filename = page_id + ext
+        f.save(os.path.join(bg_dir, filename))
+        url = '/static/page_bg/' + filename
+        page['bg_image'] = url
+        try:
+            with open(CONFIG_FILE, 'w') as cf:
+                json.dump(config, cf, indent=2)
+        except OSError:
+            pass
+        notify_kiosk_reload()
+        return jsonify({"success": True, "url": url})
+
+    # DELETE
+    page.pop('bg_image', None)
+    for old in os.listdir(bg_dir):
+        if old.startswith(page_id + '.'):
+            try:
+                os.remove(os.path.join(bg_dir, old))
+            except OSError:
+                pass
+    try:
+        with open(CONFIG_FILE, 'w') as cf:
+            json.dump(config, cf, indent=2)
+    except OSError:
+        pass
+    notify_kiosk_reload()
+    return jsonify({"success": True})
+
+
 @app.route("/api/pages/<page_id>", methods=["DELETE"])
 def delete_page(page_id):
     global config
@@ -1205,6 +1259,15 @@ def delete_page(page_id):
     config["pages"] = [p for p in pages if p["id"] != page_id]
     if len(config["pages"]) == before:
         return jsonify({"error": "Page introuvable"}), 404
+    # Nettoyer l'image de fond associée
+    bg_dir = os.path.join(app.root_path, 'static', 'page_bg')
+    if os.path.isdir(bg_dir):
+        for old in os.listdir(bg_dir):
+            if old.startswith(page_id + '.'):
+                try:
+                    os.remove(os.path.join(bg_dir, old))
+                except OSError:
+                    pass
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)

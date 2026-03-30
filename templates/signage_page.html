@@ -230,16 +230,21 @@ function applyPageRotation(rotation) {
 function initPage(page) {
   const root = document.getElementById('signage-root');
   const bg = page.bg_color || '#1a1a2e';
-  document.body.style.background = bg;
-  root.style.background = bg;
+  document.body.style.backgroundColor = bg;
+  root.style.backgroundColor = bg;
+  if (page.bg_image) {
+    root.style.backgroundImage = `url(${page.bg_image})`;
+    root.style.backgroundSize = 'cover';
+    root.style.backgroundPosition = 'center';
+  }
   applyPageRotation(page.rotation || 0);
 
   for (const w of (page.widgets || [])) {
     let el = null;
     if (w.type === 'background') {
       const c = (w.config || {}).color || bg;
-      root.style.background = c;
-      document.body.style.background = c;
+      root.style.backgroundColor = c;
+      document.body.style.backgroundColor = c;
       continue;
     } else if (w.type === 'clock') {
       el = buildClock(w);
