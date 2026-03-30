@@ -220,7 +220,16 @@ function showSignagePage(pageItem) {
 function advanceFromPage() {
   // Retour en phase média après les pages
   _page_index = -1;
-  if (_playlist.length === 0) { showWelcome(); return; }
+  if (_playlist.length === 0) {
+    // Mode page seule : boucler sur la liste de pages
+    if (_pages_list.length > 0) {
+      _page_index = 0;
+      showSignagePage(_pages_list[0]);
+    } else {
+      showWelcome();
+    }
+    return;
+  }
   _index = (_index + 1) % _playlist.length;
   if (!_state.config.loop && _index === 0) {
     _index = _playlist.length - 1;

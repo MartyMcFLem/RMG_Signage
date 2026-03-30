@@ -209,12 +209,29 @@ function buildTicker(w) {
   return el;
 }
 
+/* ── Page rotation ────────────────────────────────── */
+function applyPageRotation(rotation) {
+  const root = document.getElementById('signage-root');
+  const r = parseInt(rotation) || 0;
+  if (r === 90 || r === 270) {
+    root.style.width    = '100vh';
+    root.style.height   = '100vw';
+    root.style.position = 'absolute';
+    root.style.top      = '50%';
+    root.style.left     = '50%';
+    root.style.transform = `translate(-50%, -50%) rotate(${r}deg)`;
+  } else if (r === 180) {
+    root.style.transform = 'rotate(180deg)';
+  }
+}
+
 /* ── Render all widgets ───────────────────────────── */
 function initPage(page) {
   const root = document.getElementById('signage-root');
   const bg = page.bg_color || '#1a1a2e';
   document.body.style.background = bg;
   root.style.background = bg;
+  applyPageRotation(page.rotation || 0);
 
   for (const w of (page.widgets || [])) {
     let el = null;

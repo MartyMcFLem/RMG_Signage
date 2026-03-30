@@ -61,6 +61,7 @@ config = {
     "file_durations": {},    # durées par fichier {"photo.jpg": 12}
     "playlists": [],         # [{id, name, files, created}]
     "active_playlist": None, # id de la playlist active (None = tous les fichiers)
+    "active_page": None,      # id de la page en lecture seule (None = mode normal)
     "pages": [],             # pages de signage avec widgets
 }
 
@@ -745,7 +746,17 @@ def kiosk_state():
         _show_ip_event.clear()
 
     # Construire la liste d'items médias + pages entrelacées
-    pages_cfg = config.get("pages", [])
+    # Mode page seule : afficher uniquement cette page en boucle
+    active_page_id = config.get("active_page")
+    if active_page_id:
+        active_pg = next((p for p in config.get("pages", []) if p["id"] == active_page_id), None)
+        if active_pg:
+            playlist_files = []
+            pages_cfg = [active_pg]
+        else:
+            pages_cfg = config.get("pages", [])
+    else:
+        pages_cfg = config.get("pages", [])
     page_items = [
         {"type": "page", "id": p["id"], "name": p.get("name", ""),
          "duration": p.get("duration", 15),
@@ -1086,9 +1097,43 @@ def activate_playlist(pl_id):
 
 # === PAGES DE SIGNAGE ===
 
+@app.route("/api/pages/<page_id>/activate", methods=["POST"])
+def activate_page(page_id):
+    """Passe en mode lecture seule sur cette page (boucle sans médias)."""
+    global config
+    pg = next((p for p in config.get("pages", []) if p["id"] == page_id), None)
+    if not pg:
+        return jsonify({"success": False, "message": "Page introuvable"}), 404
+    config["active_page"] = page_id
+    config["active_playlist"] = None
+    config["single_file_mode"] = False
+    config["selected_file"] = None
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    notify_kiosk_reload()
+    return jsonify({"success": True, "message": f"Page '{pg['name']}' en lecture seule"})
+
+
+@app.route("/api/pages/deactivate", methods=["POST"])
+def deactivate_page():
+    """Quitte le mode lecture seule, repasse en lecture de playlist/tous les médias."""
+    global config
+    config["active_page"] = None
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    notify_kiosk_reload()
+    return jsonify({"success": True, "message": "Lecture normale reprise"})
+
+
 @app.route("/api/pages", methods=["GET"])
 def get_pages():
-    return jsonify({"pages": config.get("pages", [])})
+    return jsonify({"pages": config.get("pages", []), "active_page": config.get("active_page")})
 
 
 @app.route("/api/pages", methods=["POST"])
@@ -1101,6 +1146,7 @@ def create_page():
         "duration": max(1, int(data.get("duration", 15))),
         "order_index": data.get("order_index"),
         "bg_color": data.get("bg_color", "#1a1a2e"),
+        "rotation": int(data.get("rotation", 0)) if data.get("rotation") in (0, 90, 180, 270, "0", "90", "180", "270") else 0,
         "widgets": data.get("widgets", []),
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
@@ -1133,11 +1179,13 @@ def update_page(page_id):
         return jsonify({"error": "Page introuvable"}), 404
     data = request.get_json() or {}
     page = pages[idx]
-    for field in ("name", "duration", "order_index", "bg_color", "widgets"):
+    for field in ("name", "duration", "order_index", "bg_color", "rotation", "widgets"):
         if field in data:
             page[field] = data[field]
     if "duration" in data:
         page["duration"] = max(1, int(page["duration"]))
+    if "rotation" in data:
+        page["rotation"] = int(page["rotation"]) if page["rotation"] in (0, 90, 180, 270, "0", "90", "180", "270") else 0
     page["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     config["pages"][idx] = page
     try:

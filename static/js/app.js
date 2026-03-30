@@ -607,25 +607,60 @@ async function loadPages() {
   try {
     const data = await fetch('/api/pages').then(r => r.json());
     _pages = data.pages || [];
+    const active = data.active_page || null;
+
+    const banner = document.getElementById('pageActiveBanner');
+    if (active) {
+      const ap = _pages.find(p => p.id === active);
+      if (ap) {
+        document.getElementById('pageActiveName').textContent = ap.name;
+        banner.style.display = 'flex';
+      } else { banner.style.display = 'none'; }
+    } else { banner.style.display = 'none'; }
+
     const list = document.getElementById('pagesList');
     if (!_pages.length) {
       list.innerHTML = '<div class="pl-empty">Aucune page. Cliquez sur "+ Nouvelle page" pour commencer.</div>';
       return;
     }
-    list.innerHTML = _pages.map((p, i) => `
-      <div class="pl-item">
-        <div class="pl-icon">&#9718;</div>
+    list.innerHTML = _pages.map((p, i) => {
+      const isActive = p.id === active;
+      const rotLabel = p.rotation ? ` &middot; ${p.rotation}°` : '';
+      return `
+      <div class="pl-item${isActive ? ' active-pl' : ''}">
+        <div class="pl-icon">${isActive ? '&#9654;' : '&#9718;'}</div>
         <div class="pl-info">
           <div class="pl-name">${p.name}</div>
-          <div class="pl-meta">${(p.widgets||[]).length} widget${(p.widgets||[]).length>1?'s':''} &middot; ${p.duration}s</div>
+          <div class="pl-meta">${(p.widgets||[]).length} widget${(p.widgets||[]).length>1?'s':''} &middot; ${p.duration}s${rotLabel}${isActive ? ' &middot; Lecture seule' : ''}</div>
         </div>
         <div class="pl-actions">
-          <button class="btn btn-ghost btn-sm" onclick="previewPageById('${p.id}')">Apercu</button>
-          <button class="btn btn-blue btn-sm" onclick="openPageBuilder('${p.id}')">Editer</button>
+          ${isActive
+            ? '<button class="btn btn-ghost btn-sm" onclick="deactivatePage()">Stop</button>'
+            : `<button class="btn btn-blue btn-sm" onclick="activatePage('${p.id}')">Lire seule</button>`}
+          <button class="btn btn-ghost btn-sm" onclick="previewPageById('${p.id}')">Aperçu</button>
+          <button class="btn btn-ghost btn-sm" onclick="openPageBuilder('${p.id}')">Editer</button>
           <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePage('${p.id}','${p.name.replace(/'/g,'&#39;')}')">Suppr.</button>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } catch(e) {}
+}
+
+async function activatePage(id) {
+  try {
+    const res = await fetch('/api/pages/' + id + '/activate', {method: 'POST'});
+    const data = await res.json();
+    showToast(data.message || 'Page active');
+    loadPages(); loadDashboard();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+async function deactivatePage() {
+  try {
+    await fetch('/api/pages/deactivate', {method: 'POST'});
+    showToast('Lecture normale reprise');
+    loadPages(); loadDashboard();
+  } catch(e) { showToast('Erreur : ' + e.message); }
 }
 
 async function deletePage(id, name) {
@@ -655,12 +690,14 @@ function openPageBuilder(pageId) {
       document.getElementById('pbName').value = p.name;
       document.getElementById('pbDuration').value = p.duration;
       document.getElementById('pbBgColor').value = p.bg_color || '#1a1a2e';
+      document.getElementById('pbRotation').value = String(p.rotation || 0);
       _pbWidgets = JSON.parse(JSON.stringify(p.widgets || []));
     }
   } else {
     document.getElementById('pbName').value = '';
     document.getElementById('pbDuration').value = 15;
     document.getElementById('pbBgColor').value = '#1a1a2e';
+    document.getElementById('pbRotation').value = '0';
   }
 
   // Sync canvas bg with color picker
@@ -682,7 +719,8 @@ async function savePageBuilder() {
   if (!name) { showToast('Entrez un nom de page'); return; }
   const duration = parseInt(document.getElementById('pbDuration').value) || 15;
   const bg_color = document.getElementById('pbBgColor').value;
-  const payload = {name, duration, bg_color, widgets: _pbWidgets};
+  const rotation = parseInt(document.getElementById('pbRotation').value) || 0;
+  const payload = {name, duration, bg_color, rotation, widgets: _pbWidgets};
   try {
     if (_editPageId) {
       await fetch('/api/pages/' + _editPageId, {
