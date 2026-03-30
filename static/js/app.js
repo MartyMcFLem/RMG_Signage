@@ -597,8 +597,10 @@ let _pages           = [];
 let _editPageId      = null;   // null = création, string = édition
 let _pbWidgets       = [];     // widgets en cours d'édition
 let _pbSelected      = null;   // id du widget sélectionné dans le canvas
-let _pbDrag          = null;   // état du drag {wId, startX, startY, origX, origY}
+let _pbDrag          = null;   // état du drag {wId, mode, handle, startX, startY, origX, origY, origW, origH, cw, ch}
 let _builderPlaylists = [];    // playlists chargées pour le widget média
+const SNAP_GRID = 2.5;         // taille de grille (écran % de la taille totale)
+const snapVal = v => Math.round(v / SNAP_GRID) * SNAP_GRID;
 const WIDGET_COLORS = {
   background:'#6366f1', clock:'#2563eb', text:'#16a34a',
   weather:'#ea580c', media:'#0891b2', ticker:'#7c3aed',
@@ -889,10 +891,14 @@ function renderWidgetProps() {
       <div class="prop-row"><label>Gras</label><input type="checkbox" ${c.bold?'checked':''} onchange="_pbSetC('bold',this.checked)"></div>
       <div class="prop-row"><label>Italique</label><input type="checkbox" ${c.italic?'checked':''} onchange="_pbSetC('italic',this.checked)"></div>`;
   } else if (w.type === 'weather') {
+    const hasCoords = c.lat && c.lon;
     typeFields = `
-      <div class="prop-row"><label>Ville (texte)</label><input type="text" value="${c.city||''}" placeholder="Paris" onchange="_pbSetC('city',this.value)"></div>
-      <div class="prop-row"><label>Latitude</label><input type="number" step="0.01" value="${c.lat||48.85}" onchange="_pbSetC('lat',+this.value)"></div>
-      <div class="prop-row"><label>Longitude</label><input type="number" step="0.01" value="${c.lon||2.35}" onchange="_pbSetC('lon',+this.value)"></div>
+      <div class="prop-row">
+        <label>Ville</label>
+        <input type="text" id="pb-weather-city" value="${c.city||''}" placeholder="Ex: Paris, Lyon…" style="flex:1" oninput="_pbSetC('city',this.value)">
+        <button class="btn btn-ghost btn-sm" onclick="_geocodeWeatherCity()" style="padding:5px 8px;flex-shrink:0">🔍</button>
+      </div>
+      <div id="pb-weather-coords" style="font-size:11px;color:var(--text-3);padding:2px 0 4px 90px">${hasCoords ? `📍 ${c.lat}, ${c.lon}` : 'Entrez une ville et cliquez 🔍'}</div>
       <div class="prop-row"><label>Unité</label><select onchange="_pbSetC('unit',this.value)"><option value="celsius" ${c.unit!=='fahrenheit'?'selected':''}>Celsius (°C)</option><option value="fahrenheit" ${c.unit==='fahrenheit'?'selected':''}>Fahrenheit (°F)</option></select></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
       <div class="prop-row"><label>Taille temp px</label><input type="number" value="${c.temp_font_size||72}" min="10" max="300" onchange="_pbSetC('temp_font_size',+this.value)"></div>`;
@@ -939,6 +945,36 @@ function _pbSetC(key, val) {
 function _rgbaToHex(c) {
   if (!c || c.startsWith('#')) return c || '#000000';
   return '#000000'; // fallback for rgba strings
+}
+
+async function _geocodeWeatherCity() {
+  const input = document.getElementById('pb-weather-city');
+  const coordsEl = document.getElementById('pb-weather-coords');
+  if (!input || !coordsEl) return;
+  const city = input.value.trim();
+  if (!city) return;
+  _pbSetC('city', city);
+  coordsEl.textContent = '⏳ Recherche en cours…';
+  try {
+    const resp = await fetch(
+      'https://geocoding-api.open-meteo.com/v1/search?name=' +
+      encodeURIComponent(city) + '&count=1&language=fr&format=json'
+    );
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!data.results || !data.results.length) {
+      coordsEl.textContent = '❌ Ville introuvable';
+      return;
+    }
+    const r = data.results[0];
+    _pbSetC('lat', r.latitude);
+    _pbSetC('lon', r.longitude);
+    _pbSetC('city', r.name);
+    input.value = r.name;
+    coordsEl.textContent = `📍 ${r.latitude}, ${r.longitude}${r.country ? ' — ' + r.country : ''}`;
+  } catch(e) {
+    coordsEl.textContent = '❌ Erreur : ' + e.message;
+  }
 }
 
 // ── Init ──────────────────────────────────────────────
