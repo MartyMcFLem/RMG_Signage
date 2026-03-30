@@ -598,6 +598,7 @@ let _pbSelected      = null;   // id du widget sélectionné dans le canvas
 let _pbDrag          = null;   // état du drag {wId, mode, handle, startX, startY, origX, origY, origW, origH, cw, ch}
 let _bgImageUrl      = null;   // URL de l'image de fond de la page en cours d'édition
 let _builderPlaylists = [];    // playlists chargées pour le widget média
+let _builderFiles     = [];    // fichiers importés chargés pour le widget média
 const SNAP_GRID = 2.5;         // taille de grille (écran % de la taille totale)
 const snapVal = v => Math.round(v / SNAP_GRID) * SNAP_GRID;
 const WIDGET_COLORS = {
@@ -708,10 +709,13 @@ function openPageBuilder(pageId) {
 
   // Sync canvas bg with color picker
   document.getElementById('pbBgColor').oninput = () => renderCanvas();
-  // Pre-fetch playlists for media widget source picker
+  // Pre-fetch playlists et fichiers pour le widget média
   fetch('/api/playlists').then(r => r.json()).then(data => {
     _builderPlaylists = data.playlists || [];
   }).catch(() => { _builderPlaylists = []; });
+  fetch('/api/files').then(r => r.json()).then(data => {
+    _builderFiles = data || [];
+  }).catch(() => { _builderFiles = []; });
   document.getElementById('pageBuilder').style.display = 'block';
   renderCanvas();
 }
@@ -1016,16 +1020,24 @@ function renderWidgetProps() {
       <div class="prop-row"><label>Taille temp px</label><input type="number" value="${c.temp_font_size||72}" min="10" max="300" onchange="_pbSetC('temp_font_size',+this.value)"></div>`;
   } else if (w.type === 'media') {
     const srcType = c.source_type || 'all';
+    const isFile = srcType.startsWith('file:');
+    const selectedFile = isFile ? srcType.slice(5) : '';
     const plOptions = [
       `<option value="all" ${srcType==='all'?'selected':''}>Tous les médias</option>`,
+      `<option value="file:" ${isFile?'selected':''}>Fichier unique</option>`,
       ..._builderPlaylists.map(p =>
         `<option value="pl:${p.id}" ${srcType==='pl:'+p.id?'selected':''}>${p.name}</option>`
       )
     ].join('');
+    const filePicker = isFile ? `
+      <div class="prop-row"><label>Fichier</label><select onchange="_pbSetC('source_type','file:'+this.value)">
+        ${_builderFiles.map(f => `<option value="${f.replace(/"/g,'&quot;')}" ${f===selectedFile?'selected':''}>${f}</option>`).join('')}
+      </select></div>` : '';
     typeFields = `
-      <div class="prop-row"><label>Source</label><select onchange="_pbSetC('source_type',this.value)">${plOptions}</select></div>
+      <div class="prop-row"><label>Source</label><select onchange="_pbSetC('source_type',this.value);renderWidgetProps()">${plOptions}</select></div>
+      ${filePicker}
       <div class="prop-row"><label>Ajustement</label><select onchange="_pbSetC('fit',this.value)"><option value="contain" ${c.fit!=='cover'?'selected':''}>Contain</option><option value="cover" ${c.fit==='cover'?'selected':''}>Cover</option></select></div>
-      <div class="prop-row"><label>Durée img (s)</label><input type="number" value="${c.duration||8}" min="1" max="300" onchange="_pbSetC('duration',+this.value)"></div>`;
+      ${!isFile ? `<div class="prop-row"><label>Durée img (s)</label><input type="number" value="${c.duration||8}" min="1" max="300" onchange="_pbSetC('duration',+this.value)"></div>` : ''}`;
   } else if (w.type === 'ticker') {
     typeFields = `
       <div class="prop-row"><label>URL RSS</label><input type="url" value="${c.rss_url||''}" placeholder="https://..." onchange="_pbSetC('rss_url',this.value)" style="width:100%"></div>

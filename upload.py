@@ -1286,6 +1286,51 @@ def render_signage_page(page_id):
     return render_template("signage_page.html", page=page)
 
 
+@app.route("/api/rss-proxy")
+def rss_proxy():
+    """Proxy RSS : récupère un flux RSS/Atom distant et retourne les titres en JSON.
+    Paramètre : url (URL du flux à récupérer)."""
+    import urllib.request as _urlreq
+    import xml.etree.ElementTree as _ET
+
+    raw_url = request.args.get("url", "").strip()
+    if not raw_url:
+        return jsonify({"error": "Paramètre url manquant"}), 400
+    if not raw_url.startswith(("http://", "https://")):
+        return jsonify({"error": "URL invalide"}), 400
+
+    try:
+        req = _urlreq.Request(raw_url, headers={"User-Agent": "RMGSignage/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as resp:
+            xml_bytes = resp.read()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+    try:
+        root = _ET.fromstring(xml_bytes)
+    except _ET.ParseError as e:
+        return jsonify({"error": "XML invalide : " + str(e)}), 502
+
+    # Namespace Atom éventuel
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    items = []
+
+    # RSS 2.0 : <channel><item><title>
+    for item in root.iter("item"):
+        title_el = item.find("title")
+        if title_el is not None and title_el.text:
+            items.append({"title": title_el.text.strip()})
+
+    # Atom : <entry><title>
+    if not items:
+        for entry in root.iter("{http://www.w3.org/2005/Atom}entry"):
+            title_el = entry.find("{http://www.w3.org/2005/Atom}title")
+            if title_el is not None and title_el.text:
+                items.append({"title": title_el.text.strip()})
+
+    return jsonify({"items": items})
+
+
 @app.route("/api/weather")
 def weather_proxy():
     """Proxy vers Open-Meteo (gratuit, sans clé API) pour éviter les CORS."""
