@@ -60,7 +60,8 @@ config = {
     "file_order": [],        # ordre personnalisé des fichiers
     "file_durations": {},    # durées par fichier {"photo.jpg": 12}
     "playlists": [],         # [{id, name, files, created}]
-    "active_playlist": None  # id de la playlist active (None = tous les fichiers)
+    "active_playlist": None, # id de la playlist active (None = tous les fichiers)
+    "pages": [],             # pages de signage avec widgets
 }
 
 if os.path.exists(CONFIG_FILE):
@@ -77,6 +78,8 @@ _player_lock = threading.Lock()
 _playlist_generation = 0
 # Événement utilisé pour signaler «passer au média suivant» depuis l'API.
 _kiosk_next_event = threading.Event()
+# Événement utilisé pour signaler «afficher l'écran IP» depuis l'API.
+_show_ip_event = threading.Event()
 
 # Taille maximale d'upload : 500 Mo
 MAX_UPLOAD_SIZE = 500 * 1024 * 1024
@@ -736,9 +739,42 @@ def kiosk_state():
     if next_triggered:
         _kiosk_next_event.clear()
 
+    # Vérifier si l'affichage de l'écran IP a été demandé
+    show_ip_triggered = _show_ip_event.is_set()
+    if show_ip_triggered:
+        _show_ip_event.clear()
+
+    # Construire la liste d'items médias + pages entrelacées
+    pages_cfg = config.get("pages", [])
+    page_items = [
+        {"type": "page", "id": p["id"], "name": p.get("name", ""),
+         "duration": p.get("duration", 15),
+         "_oi": p.get("order_index")}
+        for p in pages_cfg
+    ]
+    # Pages avec order_index triées, puis celles sans (fin de cycle)
+    page_items.sort(key=lambda p: (p["_oi"] is None, p["_oi"] if p["_oi"] is not None else 0))
+    ordered_pages = [p for p in page_items if p["_oi"] is not None]
+    trailing_pages = [p for p in page_items if p["_oi"] is None]
+    items = []
+    pi = 0
+    for i, f in enumerate(playlist_files):
+        while pi < len(ordered_pages) and ordered_pages[pi]["_oi"] <= i:
+            op = {k: v for k, v in ordered_pages[pi].items() if k != "_oi"}
+            items.append(op)
+            pi += 1
+        items.append({"type": "media", "file": f})
+    while pi < len(ordered_pages):
+        op = {k: v for k, v in ordered_pages[pi].items() if k != "_oi"}
+        items.append(op)
+        pi += 1
+    for tp in trailing_pages:
+        items.append({k: v for k, v in tp.items() if k != "_oi"})
+
     return jsonify({
         "generation": _playlist_generation,
         "files": playlist_files,
+        "items": items,
         "config": {
             "image_duration": config.get('image_duration', 8),
             "shuffle": config.get('shuffle', True),
@@ -748,7 +784,35 @@ def kiosk_state():
             "file_durations": config.get('file_durations', {}),
         },
         "next": next_triggered,
+        "show_ip": show_ip_triggered,
     })
+
+@app.route("/api/kiosk/ip-info")
+def kiosk_ip_info():
+    """Retourne l'IP locale et un QR code (PNG base64) pointant vers l'interface web."""
+    import io, base64 as _b64
+    ip = get_local_ip()
+    url = f"http://{ip}:{FLASK_PORT}"
+    qr_data = None
+    try:
+        import qrcode as _qrcode
+        qr = _qrcode.QRCode(
+            box_size=10, border=3,
+            error_correction=_qrcode.constants.ERROR_CORRECT_M
+        )
+        qr.add_data(url)
+        qr.make(fit=True)
+        qr_wrapped = qr.make_image(fill_color="black", back_color="white")
+        if hasattr(qr_wrapped, 'get_image'):
+            qr_pil = qr_wrapped.get_image()
+        else:
+            qr_pil = qr_wrapped
+        buf = io.BytesIO()
+        qr_pil.save(buf, format='PNG')
+        qr_data = "data:image/png;base64," + _b64.b64encode(buf.getvalue()).decode()
+    except Exception as e:
+        print(f"⚠️  QR code non généré : {e}")
+    return jsonify({"ip": ip, "url": url, "qr": qr_data})
 
 @app.route("/api/delete/<filename>", methods=["DELETE"])
 def delete_file(filename):
@@ -855,12 +919,11 @@ def control_player(action):
         _kiosk_next_event.set()
         return jsonify({"success": True, "message": "Fichier suivant"})
     elif action == "show-ip":
-        # Générer l'écran de bienvenue et forcer la page kiosk à l'afficher
-        generate_welcome_screen()
-        notify_kiosk_reload()
+        # Signaler à la page kiosk d'afficher l'overlay IP
+        _show_ip_event.set()
         if player_process is None or player_process.poll() is not None:
             restart_chromium()
-        return jsonify({"success": True, "message": "Écran de connexion affiché"})
+        return jsonify({"success": True, "message": "Écran IP affiché"})
     return jsonify({"success": False, "message": "Action inconnue"}), 400
 
 
@@ -1021,6 +1084,126 @@ def activate_playlist(pl_id):
     return jsonify({"success": True, "message": f"Playlist '{pl['name']}' activee"})
 
 
+# === PAGES DE SIGNAGE ===
+
+@app.route("/api/pages", methods=["GET"])
+def get_pages():
+    return jsonify({"pages": config.get("pages", [])})
+
+
+@app.route("/api/pages", methods=["POST"])
+def create_page():
+    global config
+    data = request.get_json() or {}
+    page = {
+        "id": str(_uuid.uuid4())[:8],
+        "name": (data.get("name") or "Nouvelle page").strip(),
+        "duration": max(1, int(data.get("duration", 15))),
+        "order_index": data.get("order_index"),
+        "bg_color": data.get("bg_color", "#1a1a2e"),
+        "widgets": data.get("widgets", []),
+        "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    if "pages" not in config:
+        config["pages"] = []
+    config["pages"].append(page)
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    notify_kiosk_reload()
+    return jsonify({"success": True, "page": page})
+
+
+@app.route("/api/pages/<page_id>", methods=["GET"])
+def get_page(page_id):
+    page = next((p for p in config.get("pages", []) if p["id"] == page_id), None)
+    if not page:
+        return jsonify({"error": "Page introuvable"}), 404
+    return jsonify(page)
+
+
+@app.route("/api/pages/<page_id>", methods=["PUT"])
+def update_page(page_id):
+    global config
+    pages = config.get("pages", [])
+    idx = next((i for i, p in enumerate(pages) if p["id"] == page_id), None)
+    if idx is None:
+        return jsonify({"error": "Page introuvable"}), 404
+    data = request.get_json() or {}
+    page = pages[idx]
+    for field in ("name", "duration", "order_index", "bg_color", "widgets"):
+        if field in data:
+            page[field] = data[field]
+    if "duration" in data:
+        page["duration"] = max(1, int(page["duration"]))
+    page["updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    config["pages"][idx] = page
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    notify_kiosk_reload()
+    return jsonify({"success": True, "page": page})
+
+
+@app.route("/api/pages/<page_id>", methods=["DELETE"])
+def delete_page(page_id):
+    global config
+    pages = config.get("pages", [])
+    before = len(pages)
+    config["pages"] = [p for p in pages if p["id"] != page_id]
+    if len(config["pages"]) == before:
+        return jsonify({"error": "Page introuvable"}), 404
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except:
+        pass
+    notify_kiosk_reload()
+    return jsonify({"success": True})
+
+
+@app.route("/signage/<page_id>")
+def render_signage_page(page_id):
+    """Rendu plein écran d'une page de signage (affiché dans l'iframe kiosk)."""
+    page = next((p for p in config.get("pages", []) if p["id"] == page_id), None)
+    if not page:
+        return "Page introuvable", 404
+    return render_template("signage_page.html", page=page)
+
+
+@app.route("/api/weather")
+def weather_proxy():
+    """Proxy vers Open-Meteo (gratuit, sans clé API) pour éviter les CORS."""
+    import urllib.request as _urlreq
+    try:
+        lat = float(request.args.get("lat", "48.85"))
+        lon = float(request.args.get("lon", "2.35"))
+        unit = request.args.get("unit", "celsius")
+        if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+            return jsonify({"error": "Coordonnées invalides"}), 400
+        if unit not in ("celsius", "fahrenheit"):
+            unit = "celsius"
+        url = (
+            f"https://api.open-meteo.com/v1/forecast"
+            f"?latitude={lat:.6f}&longitude={lon:.6f}"
+            f"&current_weather=true"
+            f"&hourly=relativehumidity_2m,apparent_temperature"
+            f"&temperature_unit={unit}&forecast_days=1&timezone=auto"
+        )
+        req = _urlreq.Request(url, headers={"User-Agent": "RMGSignage/1.0"})
+        with _urlreq.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode())
+        return jsonify(data)
+    except ValueError:
+        return jsonify({"error": "Paramètres invalides"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
 @app.route("/api/update/status", methods=["GET"])
 def update_git_status():
     """Retourne les informations git actuelles (branche locale + dernier commit de origin/main)"""
@@ -1162,6 +1345,18 @@ def start_chromium(boot_delay=True):
     profile_dir = "/tmp/rmg_chromium_profile"
     os.makedirs(profile_dir, exist_ok=True)
 
+    # Désactiver la popup de traduction via les préférences Chromium
+    prefs_dir = os.path.join(profile_dir, "Default")
+    os.makedirs(prefs_dir, exist_ok=True)
+    prefs_file = os.path.join(prefs_dir, "Preferences")
+    if not os.path.exists(prefs_file):
+        try:
+            with open(prefs_file, 'w') as _pf:
+                json.dump({"translate": {"enabled": False},
+                           "translate_site_blacklist_with_time": {}}, _pf)
+        except Exception:
+            pass
+
     cmd = [
         CHROMIUM_BINARY,
         "--kiosk",
@@ -1170,7 +1365,8 @@ def start_chromium(boot_delay=True):
         "--no-first-run",
         "--disable-session-crashed-bubble",
         "--disable-restore-session-state",
-        "--disable-features=TranslateUI",
+        "--disable-features=Translate,TranslateUI",
+        "--lang=fr-FR",
         "--check-for-update-interval=31536000",
         f"--user-data-dir={profile_dir}",
         url,

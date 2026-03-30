@@ -28,6 +28,7 @@ function goTo(page) {
     mg.classList.add('open');
   }
   if (page === 'playlists') loadPlaylists();
+  if (page === 'pages') loadPages();
   document.getElementById('sidebarNav').classList.remove('open');
   document.getElementById('navOverlay').classList.remove('open');
 }
@@ -591,10 +592,308 @@ async function savePlModal() {
   loadPlaylists();
 }
 
+// ── Pages de signage ──────────────────────────────────
+let _pages       = [];
+let _editPageId  = null;   // null = création, string = édition
+let _pbWidgets   = [];     // widgets en cours d'édition
+let _pbSelected  = null;   // id du widget sélectionné dans le canvas
+let _pbDrag      = null;   // état du drag {wId, startX, startY, origX, origY}
+const WIDGET_COLORS = {
+  background:'#6366f1', clock:'#2563eb', text:'#16a34a',
+  weather:'#ea580c', media:'#0891b2', ticker:'#7c3aed',
+};
+
+async function loadPages() {
+  try {
+    const data = await fetch('/api/pages').then(r => r.json());
+    _pages = data.pages || [];
+    const list = document.getElementById('pagesList');
+    if (!_pages.length) {
+      list.innerHTML = '<div class="pl-empty">Aucune page. Cliquez sur "+ Nouvelle page" pour commencer.</div>';
+      return;
+    }
+    list.innerHTML = _pages.map((p, i) => `
+      <div class="pl-item">
+        <div class="pl-icon">&#9718;</div>
+        <div class="pl-info">
+          <div class="pl-name">${p.name}</div>
+          <div class="pl-meta">${(p.widgets||[]).length} widget${(p.widgets||[]).length>1?'s':''} &middot; ${p.duration}s</div>
+        </div>
+        <div class="pl-actions">
+          <button class="btn btn-ghost btn-sm" onclick="previewPageById('${p.id}')">Apercu</button>
+          <button class="btn btn-blue btn-sm" onclick="openPageBuilder('${p.id}')">Editer</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePage('${p.id}','${p.name.replace(/'/g,'&#39;')}')">Suppr.</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function deletePage(id, name) {
+  if (!confirm('Supprimer la page "' + name + '" ?')) return;
+  await fetch('/api/pages/' + id, {method:'DELETE'});
+  loadPages();
+  showToast('Page supprimée');
+}
+
+function previewPage() {
+  if (!_editPageId) { showToast('Enregistrez d\'abord la page.'); return; }
+  previewPageById(_editPageId);
+}
+function previewPageById(id) {
+  window.open('/signage/' + id, '_blank', 'width=960,height=540');
+}
+
+/* ── Builder open/close ──────────────────────────── */
+function openPageBuilder(pageId) {
+  _editPageId = pageId || null;
+  _pbWidgets = [];
+  _pbSelected = null;
+
+  if (pageId) {
+    const p = _pages.find(p => p.id === pageId);
+    if (p) {
+      document.getElementById('pbName').value = p.name;
+      document.getElementById('pbDuration').value = p.duration;
+      document.getElementById('pbBgColor').value = p.bg_color || '#1a1a2e';
+      _pbWidgets = JSON.parse(JSON.stringify(p.widgets || []));
+    }
+  } else {
+    document.getElementById('pbName').value = '';
+    document.getElementById('pbDuration').value = 15;
+    document.getElementById('pbBgColor').value = '#1a1a2e';
+  }
+
+  // Sync canvas bg with color picker
+  document.getElementById('pbBgColor').oninput = () => renderCanvas();
+  document.getElementById('pageBuilder').style.display = 'block';
+  renderCanvas();
+}
+
+function closePageBuilder() {
+  document.getElementById('pageBuilder').style.display = 'none';
+  _editPageId = null;
+  _pbWidgets = [];
+  _pbSelected = null;
+}
+
+/* ── Save ────────────────────────────────────────── */
+async function savePageBuilder() {
+  const name = document.getElementById('pbName').value.trim();
+  if (!name) { showToast('Entrez un nom de page'); return; }
+  const duration = parseInt(document.getElementById('pbDuration').value) || 15;
+  const bg_color = document.getElementById('pbBgColor').value;
+  const payload = {name, duration, bg_color, widgets: _pbWidgets};
+  try {
+    if (_editPageId) {
+      await fetch('/api/pages/' + _editPageId, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
+      });
+      showToast('Page mise à jour');
+    } else {
+      const res = await fetch('/api/pages', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
+      });
+      const data = await res.json();
+      _editPageId = data.page?.id || null;
+      showToast('Page créée');
+    }
+    loadPages();
+  } catch(e) { showToast('Erreur : ' + e.message); }
+}
+
+/* ── Widget management ───────────────────────────── */
+const _widgetDefaults = {
+  background: {x:0,y:0,w:100,h:100, config:{color:'#1a1a2e'}},
+  clock:      {x:10,y:5,w:80,h:30, config:{font_size:90,color:'#ffffff',show_seconds:false,show_date:true,date_font_size:28,date_color:'#aaaacc'}},
+  text:       {x:10,y:40,w:80,h:20, config:{text:'Votre texte ici',font_size:48,color:'#ffffff',align:'center',bold:false,italic:false}},
+  weather:    {x:5,y:55,w:45,h:40, config:{lat:48.85,lon:2.35,city:'Paris',unit:'celsius',temp_font_size:72,icon_font_size:60,desc_font_size:22,city_font_size:22,color:'#ffffff'}},
+  media:      {x:55,y:5,w:40,h:55, config:{fit:'contain',duration:8}},
+  ticker:     {x:0,y:88,w:100,h:12, config:{rss_url:'',font_size:28,color:'#ffffff',bg_color:'rgba(0,0,0,0.6)',speed:60}},
+};
+
+function addWidget(type) {
+  const def = _widgetDefaults[type] || {x:10,y:10,w:30,h:20,config:{}};
+  const w = {
+    id: 'w' + Date.now(),
+    type,
+    x: def.x, y: def.y, w: def.w, h: def.h,
+    config: JSON.parse(JSON.stringify(def.config)),
+  };
+  _pbWidgets.push(w);
+  renderCanvas();
+  selectWidget(w.id);
+}
+
+function deleteSelectedWidget() {
+  if (!_pbSelected) return;
+  _pbWidgets = _pbWidgets.filter(w => w.id !== _pbSelected);
+  _pbSelected = null;
+  renderCanvas();
+  document.getElementById('pbProps').textContent = 'Sélectionnez un widget sur le canvas.';
+  document.getElementById('pbPropsTitle').textContent = 'Propriétés';
+}
+
+function selectWidget(wId) {
+  _pbSelected = wId;
+  renderCanvas();
+  renderWidgetProps();
+}
+
+/* ── Canvas ──────────────────────────────────────── */
+function renderCanvas() {
+  const canvas = document.getElementById('pbCanvas');
+  const bg = document.getElementById('pbBgColor').value;
+  canvas.style.background = bg;
+
+  // Remove old widget rects (keep drag listeners)
+  [...canvas.querySelectorAll('.pb-widget')].forEach(e => e.remove());
+
+  for (const w of _pbWidgets) {
+    if (w.type === 'background') continue; // background is just the canvas color
+    const el = document.createElement('div');
+    el.className = 'pb-widget';
+    el.dataset.wid = w.id;
+    const color = WIDGET_COLORS[w.type] || '#888';
+    const selected = w.id === _pbSelected;
+    el.style.cssText = `
+      position:absolute;
+      left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;
+      background:${color}22;
+      border:2px ${selected ? 'solid' : 'dashed'} ${color};
+      border-radius:4px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;color:${color};text-align:center;
+      cursor:move;box-sizing:border-box;
+      ${selected ? 'box-shadow:0 0 0 2px ' + color + '66;' : ''}
+    `;
+    const labels = {clock:'⏰ Horloge',text:'💬 Texte',weather:'🌤 Météo',media:'🖼 Média',ticker:'📰 Ticker',background:'🎨 Fond'};
+    el.innerHTML = `<span style="pointer-events:none;padding:4px;overflow:hidden;max-width:90%;">${labels[w.type]||w.type}</span>`;
+
+    // Click to select
+    el.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      selectWidget(w.id);
+      // Start drag
+      const rect = canvas.getBoundingClientRect();
+      _pbDrag = {
+        wId: w.id,
+        startX: e.clientX, startY: e.clientY,
+        origX: w.x, origY: w.y,
+        cw: rect.width, ch: rect.height,
+      };
+    });
+    canvas.appendChild(el);
+  }
+}
+
+// Canvas-level drag events
+document.addEventListener('mousemove', e => {
+  if (!_pbDrag) return;
+  const d = _pbDrag;
+  const dx = ((e.clientX - d.startX) / d.cw) * 100;
+  const dy = ((e.clientY - d.startY) / d.ch) * 100;
+  const w = _pbWidgets.find(w => w.id === d.wId);
+  if (!w) return;
+  w.x = Math.max(0, Math.min(100 - w.w, d.origX + dx));
+  w.y = Math.max(0, Math.min(100 - w.h, d.origY + dy));
+  // Live update position of the element without full re-render
+  const el = document.querySelector(`.pb-widget[data-wid="${d.wId}"]`);
+  if (el) { el.style.left = w.x + '%'; el.style.top = w.y + '%'; }
+  // Update position inputs in props panel
+  const px = document.getElementById('pb-prop-x');
+  const py = document.getElementById('pb-prop-y');
+  if (px) px.value = Math.round(w.x);
+  if (py) py.value = Math.round(w.y);
+});
+document.addEventListener('mouseup', () => { _pbDrag = null; });
+
+/* ── Widget properties panel ─────────────────────── */
+function renderWidgetProps() {
+  const w = _pbWidgets.find(w => w.id === _pbSelected);
+  const panel = document.getElementById('pbProps');
+  const title = document.getElementById('pbPropsTitle');
+  if (!w) { panel.textContent = 'Sélectionnez un widget.'; title.textContent = 'Propriétés'; return; }
+
+  const labels = {clock:'⏰ Horloge',text:'💬 Texte',weather:'🌤 Météo',media:'🖼 Média',ticker:'📰 Ticker',background:'🎨 Fond'};
+  title.textContent = labels[w.type] || w.type;
+
+  const posFields = w.type !== 'background' ? `
+    <div class="prop-row"><label>X %</label><input type="number" id="pb-prop-x" value="${Math.round(w.x)}" min="0" max="99" onchange="_pbSet('x',+this.value)"></div>
+    <div class="prop-row"><label>Y %</label><input type="number" id="pb-prop-y" value="${Math.round(w.y)}" min="0" max="99" onchange="_pbSet('y',+this.value)"></div>
+    <div class="prop-row"><label>Larg %</label><input type="number" id="pb-prop-w" value="${Math.round(w.w)}" min="1" max="100" onchange="_pbSet('w',+this.value)"></div>
+    <div class="prop-row"><label>Haut %</label><input type="number" id="pb-prop-h" value="${Math.round(w.h)}" min="1" max="100" onchange="_pbSet('h',+this.value)"></div>
+    <hr style="border-color:var(--border);margin:8px 0">` : '';
+
+  let typeFields = '';
+  const c = w.config || {};
+
+  if (w.type === 'background') {
+    typeFields = `<div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#1a1a2e'}" onchange="_pbSetC('color',this.value)"></div>`;
+  } else if (w.type === 'clock') {
+    typeFields = `
+      <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||90}" min="10" max="300" onchange="_pbSetC('font_size',+this.value)"></div>
+      <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
+      <div class="prop-row"><label>Secondes</label><input type="checkbox" ${c.show_seconds?'checked':''} onchange="_pbSetC('show_seconds',this.checked)"></div>
+      <div class="prop-row"><label>Afficher date</label><input type="checkbox" ${c.show_date?'checked':''} onchange="_pbSetC('show_date',this.checked)"></div>
+      <div class="prop-row"><label>Taille date px</label><input type="number" value="${c.date_font_size||28}" min="10" max="200" onchange="_pbSetC('date_font_size',+this.value)"></div>
+      <div class="prop-row"><label>Couleur date</label><input type="color" value="${c.date_color||'#aaaacc'}" onchange="_pbSetC('date_color',this.value)"></div>`;
+  } else if (w.type === 'text') {
+    typeFields = `
+      <div class="prop-row"><label>Texte</label><textarea rows="3" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;" onchange="_pbSetC('text',this.value)">${c.text||''}</textarea></div>
+      <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||48}" min="8" max="300" onchange="_pbSetC('font_size',+this.value)"></div>
+      <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
+      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>
+      <div class="prop-row"><label>Gras</label><input type="checkbox" ${c.bold?'checked':''} onchange="_pbSetC('bold',this.checked)"></div>
+      <div class="prop-row"><label>Italique</label><input type="checkbox" ${c.italic?'checked':''} onchange="_pbSetC('italic',this.checked)"></div>`;
+  } else if (w.type === 'weather') {
+    typeFields = `
+      <div class="prop-row"><label>Ville (texte)</label><input type="text" value="${c.city||''}" placeholder="Paris" onchange="_pbSetC('city',this.value)"></div>
+      <div class="prop-row"><label>Latitude</label><input type="number" step="0.01" value="${c.lat||48.85}" onchange="_pbSetC('lat',+this.value)"></div>
+      <div class="prop-row"><label>Longitude</label><input type="number" step="0.01" value="${c.lon||2.35}" onchange="_pbSetC('lon',+this.value)"></div>
+      <div class="prop-row"><label>Unité</label><select onchange="_pbSetC('unit',this.value)"><option value="celsius" ${c.unit!=='fahrenheit'?'selected':''}>Celsius (°C)</option><option value="fahrenheit" ${c.unit==='fahrenheit'?'selected':''}>Fahrenheit (°F)</option></select></div>
+      <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
+      <div class="prop-row"><label>Taille temp px</label><input type="number" value="${c.temp_font_size||72}" min="10" max="300" onchange="_pbSetC('temp_font_size',+this.value)"></div>`;
+  } else if (w.type === 'media') {
+    typeFields = `
+      <div class="prop-row"><label>Ajustement</label><select onchange="_pbSetC('fit',this.value)"><option value="contain" ${c.fit!=='cover'?'selected':''}>Contain</option><option value="cover" ${c.fit==='cover'?'selected':''}>Cover</option></select></div>
+      <div class="prop-row"><label>Durée img (s)</label><input type="number" value="${c.duration||8}" min="1" max="300" onchange="_pbSetC('duration',+this.value)"></div>`;
+  } else if (w.type === 'ticker') {
+    typeFields = `
+      <div class="prop-row"><label>URL RSS</label><input type="url" value="${c.rss_url||''}" placeholder="https://..." onchange="_pbSetC('rss_url',this.value)" style="width:100%"></div>
+      <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||28}" min="10" max="100" onchange="_pbSetC('font_size',+this.value)"></div>
+      <div class="prop-row"><label>Couleur texte</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
+      <div class="prop-row"><label>Couleur fond</label><input type="color" value="${_rgbaToHex(c.bg_color||'#000000')}" onchange="_pbSetC('bg_color',this.value)"></div>
+      <div class="prop-row"><label>Vitesse px/s</label><input type="number" value="${c.speed||60}" min="10" max="500" onchange="_pbSetC('speed',+this.value)"></div>`;
+  }
+
+  panel.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${posFields}${typeFields}
+      <button class="btn btn-ghost btn-sm" style="color:var(--red);margin-top:8px;" onclick="deleteSelectedWidget()">Supprimer ce widget</button>
+    </div>`;
+}
+
+function _pbSet(key, val) {
+  const w = _pbWidgets.find(w => w.id === _pbSelected);
+  if (!w) return;
+  w[key] = val;
+  renderCanvas();
+}
+function _pbSetC(key, val) {
+  const w = _pbWidgets.find(w => w.id === _pbSelected);
+  if (!w) return;
+  if (!w.config) w.config = {};
+  w.config[key] = val;
+}
+function _rgbaToHex(c) {
+  if (!c || c.startsWith('#')) return c || '#000000';
+  return '#000000'; // fallback for rgba strings
+}
+
 // ── Init ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   const hash = window.location.hash.replace('#','');
-  if (['dashboard','medias','playlists','settings'].includes(hash)) goTo(hash);
+  if (['dashboard','medias','playlists','settings','pages'].includes(hash)) goTo(hash);
 
   if (window.location.search.includes('error=files')) {
     showToast('Nombre maximum de fichiers atteint -- augmentez votre licence');

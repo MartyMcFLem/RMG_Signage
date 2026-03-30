@@ -533,3 +533,41 @@ body {
 #page-dashboard .player-btn.accent:hover { background: rgba(99,102,241,.2); box-shadow: 0 4px 20px rgba(99,102,241,.25); }
 #page-dashboard .player-btn.danger:hover { border-color: rgba(251,113,133,.45); background: rgba(251,113,133,.15); box-shadow: 0 4px 20px rgba(251,113,133,.2); }
 #page-dashboard .dash-alert { max-width: 760px; margin: 0 auto 20px; }
+
+/* ── Page Builder ─────────────────────────────────── */
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+.prop-row label {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.prop-row input[type="text"],
+.prop-row input[type="number"],
+.prop-row input[type="url"],
+.prop-row select {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+.prop-row input[type="color"] {
+  width: 40px; height: 28px;
+  border: none; border-radius: 4px;
+  padding: 2px; cursor: pointer;
+}
+.prop-row textarea {
+  font-size: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+.pb-widget { transition: border-color .1s; }
+.pb-widget:hover { filter: brightness(1.15); }

@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
+  <meta name="google" content="notranslate">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RMG Signage — Kiosk</title>
   <style>
@@ -45,6 +46,56 @@
       width: 100%; height: 100%;
       object-fit: contain;
     }
+    /* IP overlay */
+    #ip-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.88);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 28px;
+      font-family: 'DejaVu Sans', sans-serif;
+      color: #fff;
+      text-align: center;
+    }
+    #ip-overlay.visible { display: flex; }
+    #ip-overlay h1 {
+      font-size: 2.2em;
+      font-weight: bold;
+      color: #aab4ff;
+      letter-spacing: 0.04em;
+      margin: 0;
+    }
+    #ip-overlay .ip-url {
+      font-size: 3.2em;
+      font-weight: bold;
+      color: #4a9eff;
+      letter-spacing: 0.02em;
+    }
+    #ip-overlay .ip-hint {
+      font-size: 1.2em;
+      color: #888;
+    }
+    #ip-overlay .qr-box {
+      background: #fff;
+      padding: 16px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #ip-overlay .qr-box img {
+      width: 220px;
+      height: 220px;
+      image-rendering: pixelated;
+    }
+    #ip-overlay .ip-countdown {
+      font-size: 0.95em;
+      color: #555;
+    }
   </style>
 </head>
 <body>
@@ -56,6 +107,21 @@
       <img id="welcome-img" src="" alt="RMG Signage">
     </div>
   </div>
+
+  <!-- Overlay IP (affiché temporairement via l'action "Afficher IP") -->
+  <div id="ip-overlay">
+    <h1>RMG Signage</h1>
+    <div class="ip-url" id="ip-display">...</div>
+    <div class="ip-hint">Scannez pour accéder à l'interface</div>
+    <div class="qr-box">
+      <img id="qr-img" src="" alt="QR Code">
+    </div>
+    <div class="ip-countdown" id="ip-countdown"></div>
+  </div>
+
+  <!-- Iframe pour les pages de signage -->
+  <iframe id="signage-iframe" src="" title="Signage page"
+          style="position:fixed;inset:0;width:100%;height:100%;border:none;display:none;z-index:50;"></iframe>
 
 <script>
 /* ═══════════════════════════════════════════════════
@@ -84,16 +150,24 @@ let _state = {
   },
 };
 
-let _playlist  = [];   // liste courante (potentiellement mélangée)
+let _playlist  = [];   // médias (filenames) de la playlist courante
 let _index     = 0;    // index courant dans _playlist
-let _timer     = null; // setTimeout pour avancer l'image
+let _pages_list = [];  // pages de signage [{type,id,name,duration}]
+let _page_index = -1;  // -1 = phase média, ≥ 0 = index dans _pages_list
+let _timer     = null; // setTimeout pour avancer
 let _playing   = false;
+let _ipTimer   = null; // setTimeout pour masquer l'overlay IP
 
 const imgEl     = document.getElementById('media-img');
 const videoEl   = document.getElementById('media-video');
 const welcomeEl = document.getElementById('welcome');
 const welcomeImg = document.getElementById('welcome-img');
 const container = document.getElementById('media-container');
+const ipOverlay  = document.getElementById('ip-overlay');
+const ipDisplay  = document.getElementById('ip-display');
+const qrImg      = document.getElementById('qr-img');
+const ipCountdown = document.getElementById('ip-countdown');
+const signageEl  = document.getElementById('signage-iframe');
 
 /* ── Rotation ────────────────────────────────────── */
 function applyRotation(deg) {
@@ -126,11 +200,41 @@ function buildPlaylist(state) {
   return files;
 }
 
+/* ── Pages de signage ────────────────────── */
+function buildPagesList(state) {
+  return (state.items || []).filter(item => item.type === 'page');
+}
+
+function showSignagePage(pageItem) {
+  hideAll();
+  clearTimeout(_timer);
+  signageEl.src = '/signage/' + pageItem.id + '?t=' + Date.now();
+  signageEl.style.display = 'block';
+  _timer = setTimeout(() => {
+    signageEl.style.display = 'none';
+    signageEl.src = '';
+    advanceFromPage();
+  }, (pageItem.duration || 15) * 1000);
+}
+
+function advanceFromPage() {
+  // Retour en phase média après les pages
+  _page_index = -1;
+  if (_playlist.length === 0) { showWelcome(); return; }
+  _index = (_index + 1) % _playlist.length;
+  if (!_state.config.loop && _index === 0) {
+    _index = _playlist.length - 1;
+  }
+  showMedia(_playlist[_index]);
+}
+
 /* ── Affichage ───────────────────────────────────── */
 function hideAll() {
   imgEl.style.display   = 'none';
   videoEl.style.display = 'none';
   welcomeEl.style.display = 'none';
+  signageEl.style.display = 'none';
+  signageEl.src = '';
   videoEl.pause();
   clearTimeout(_timer);
   _timer = null;
@@ -164,9 +268,33 @@ function showMedia(filename) {
 }
 
 function advance() {
-  if (_playlist.length === 0) { showWelcome(); return; }
+  if (_page_index >= 0) {
+    // Phase pages : avancer à la page suivante
+    _page_index++;
+    if (_page_index < _pages_list.length) {
+      showSignagePage(_pages_list[_page_index]);
+    } else {
+      advanceFromPage();
+    }
+    return;
+  }
+
+  // Phase média
+  if (_playlist.length === 0 && _pages_list.length === 0) { showWelcome(); return; }
+  if (_playlist.length === 0) {
+    _page_index = 0;
+    showSignagePage(_pages_list[0]);
+    return;
+  }
+
   _index = (_index + 1) % _playlist.length;
-  // Reboucler : si loop=false et on a fait le tour, s'arrêter sur la dernière
+  // Fin de cycle média → afficher les pages si présentes
+  if (_index === 0 && _pages_list.length > 0) {
+    if (!_state.config.loop) { _index = _playlist.length - 1; showMedia(_playlist[_index]); return; }
+    _page_index = 0;
+    showSignagePage(_pages_list[0]);
+    return;
+  }
   if (!_state.config.loop && _index === 0) {
     _index = _playlist.length - 1;
     showMedia(_playlist[_index]);
@@ -180,28 +308,81 @@ function loadPlaylist(state, preserveIndex) {
   _state = state;
   applyRotation(state.config.rotation);
 
+  _pages_list = buildPagesList(state);
   const newPlaylist = buildPlaylist(state);
 
-  if (newPlaylist.length === 0) {
+  if (newPlaylist.length === 0 && _pages_list.length === 0) {
     _playlist = [];
     _index = 0;
+    _page_index = -1;
     showWelcome();
     return;
   }
 
   const prevFile = _playlist[_index];
   _playlist = newPlaylist;
+  _page_index = -1;
 
   if (!preserveIndex) {
-    // Nouveau contenu : recommencer depuis le début
     _index = 0;
   } else if (prevFile) {
-    // Essayer de rester sur le même fichier si possible
     const ni = _playlist.indexOf(prevFile);
     _index = ni >= 0 ? ni : 0;
   }
 
-  showMedia(_playlist[_index]);
+  if (_playlist.length === 0) {
+    // Uniquement des pages
+    _page_index = 0;
+    showSignagePage(_pages_list[0]);
+  } else {
+    showMedia(_playlist[_index]);
+  }
+}
+
+/* ── Overlay IP ──────────────────────────────────── */
+async function showIpOverlay() {
+  clearTimeout(_ipTimer);
+  try {
+    const resp = await fetch('/api/kiosk/ip-info');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    ipDisplay.textContent = data.url || data.ip;
+    if (data.qr) {
+      qrImg.src = data.qr;
+      qrImg.style.display = 'block';
+    } else {
+      qrImg.style.display = 'none';
+    }
+  } catch (e) {
+    ipDisplay.textContent = 'IP indisponible';
+    qrImg.style.display = 'none';
+  }
+
+  ipOverlay.classList.add('visible');
+
+  // Fermer sur clic/tap
+  ipOverlay.onclick = hideIpOverlay;
+
+  // Auto-fermeture après 30 s avec compte à rebours
+  let remaining = 30;
+  ipCountdown.textContent = `Fermeture dans ${remaining}s`;
+  const tick = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      ipCountdown.textContent = `Fermeture dans ${remaining}s`;
+    } else {
+      clearInterval(tick);
+    }
+  }, 1000);
+  _ipTimer = setTimeout(() => { clearInterval(tick); hideIpOverlay(); }, 30000);
+}
+
+function hideIpOverlay() {
+  clearTimeout(_ipTimer);
+  _ipTimer = null;
+  ipOverlay.classList.remove('visible');
+  ipOverlay.onclick = null;
+  ipCountdown.textContent = '';
 }
 
 /* ── Poll de l'état serveur ──────────────────────── */
@@ -210,6 +391,12 @@ async function pollState() {
     const resp = await fetch('/api/kiosk/state');
     if (!resp.ok) return;
     const state = await resp.json();
+
+    // L'UI a demandé "Afficher IP"
+    if (state.show_ip) {
+      showIpOverlay();
+      return;
+    }
 
     // L'UI a demandé "suivant"
     if (state.next) {

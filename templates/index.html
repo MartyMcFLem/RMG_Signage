@@ -37,6 +37,10 @@
           <button class="nav-link" data-page="playlists" onclick="goTo('playlists')">Playlists</button>
         </div>
       </div>
+      <button class="nav-link" data-page="pages" onclick="goTo('pages')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        Pages
+      </button>
       <button class="nav-link" data-page="settings" onclick="goTo('settings')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Parametres
@@ -226,6 +230,75 @@
         <div class="modal-footer">
           <button class="btn btn-ghost" onclick="closePlModal()">Annuler</button>
           <button class="btn btn-blue" id="plModalSave" onclick="savePlModal()">Creer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ PAGES DE SIGNAGE ═══════════ -->
+    <section class="page-section" id="page-pages">
+      <div class="page-head">
+        <h1>Pages</h1>
+        <p>Créez des mises en page avec widgets (horloge, météo, texte, médias&hellip;)</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Mes pages</h2>
+          <button class="btn btn-blue btn-sm" onclick="openPageBuilder()">+ Nouvelle page</button>
+        </div>
+        <div class="card-body">
+          <div id="pagesList">
+            <div class="pl-empty">Aucune page. Cliquez sur "+ Nouvelle page" pour commencer.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ PAGE BUILDER OVERLAY ═══════════ -->
+    <div id="pageBuilder" style="display:none;position:fixed;inset:0;z-index:500;background:var(--bg);overflow:auto;">
+      <div style="max-width:1400px;margin:0 auto;padding:20px;">
+
+        <!-- Builder header -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+          <button class="btn btn-ghost" onclick="closePageBuilder()">← Retour</button>
+          <input id="pbName" type="text" placeholder="Nom de la page" style="flex:1;min-width:200px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:15px;background:var(--surface);color:var(--text);">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);">Durée&nbsp;<input id="pbDuration" type="number" min="1" max="3600" value="15" style="width:70px;padding:8px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);">s</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);">Fond&nbsp;<input id="pbBgColor" type="color" value="#1a1a2e" style="width:44px;height:36px;border:none;border-radius:6px;padding:2px;cursor:pointer;"></label>
+          <button class="btn btn-ghost btn-sm" onclick="previewPage()">Prévisualiser</button>
+          <button class="btn btn-blue" onclick="savePageBuilder()">Enregistrer</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;">
+
+          <!-- Canvas -->
+          <div>
+            <div style="font-size:12px;color:var(--text-3);margin-bottom:6px;">Canvas (cliquez sur un widget pour le sélectionner, glissez pour repositionner)</div>
+            <div id="pbCanvas" style="position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;cursor:crosshair;user-select:none;"></div>
+          </div>
+
+          <!-- Right panel -->
+          <div style="display:flex;flex-direction:column;gap:12px;">
+
+            <!-- Widget palette -->
+            <div class="card" style="margin:0">
+              <div class="card-head"><h2 style="font-size:14px">Ajouter un widget</h2></div>
+              <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <button class="btn btn-ghost btn-sm" onclick="addWidget('clock')">&#128336; Horloge</button>
+                <button class="btn btn-ghost btn-sm" onclick="addWidget('text')">&#128172; Texte</button>
+                <button class="btn btn-ghost btn-sm" onclick="addWidget('weather')">&#127782; Météo</button>
+                <button class="btn btn-ghost btn-sm" onclick="addWidget('media')">&#128444; Média</button>
+                <button class="btn btn-ghost btn-sm" onclick="addWidget('ticker')">&#128240; Fil d'actu</button>
+                <button class="btn btn-ghost btn-sm" onclick="addWidget('background')">&#127912; Fond</button>
+              </div>
+            </div>
+
+            <!-- Widget props -->
+            <div class="card" style="margin:0;flex:1" id="pbPropsCard">
+              <div class="card-head"><h2 style="font-size:14px" id="pbPropsTitle">Propriétés</h2></div>
+              <div class="card-body" id="pbProps" style="font-size:13px;color:var(--text-2);">
+                Sélectionnez un widget sur le canvas.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
