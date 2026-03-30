@@ -66,8 +66,7 @@ echo ""
 # ─── 1. Paquets système
 echo "[1/8] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git chromium-browser fbida python3-venv python3-pip fonts-dejavu-core \
-  xserver-xorg x11-xserver-utils xinit openbox
+apt-get install -y git mpv python3-venv python3-pip fonts-dejavu-core
 
 # ─── 2. Utilisateur et groupes
 echo "[2/8] Configuration de l'utilisateur '$SERVICE_USER'..."
@@ -301,7 +300,7 @@ fi
 echo "[7/8] Déploiement du service systemd..."
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
-Description=RMG Signage - Flask & Chromium Kiosk (${BRANCH})
+Description=RMG Signage - Flask & MPV (${BRANCH})
 After=network.target local-fs.target
 Wants=network.target
 RequiresMountsFor=$MEDIA_DIR
@@ -322,8 +321,6 @@ Environment=RMG_SIGNAGE_BRANCH=$BRANCH
 Environment=RMG_SIGNAGE_PORT=$PORT
 Environment=RMG_SIGNAGE_SERVICE=$SERVICE_NAME
 Environment=RMG_SIGNAGE_LICENSE=$LICENSE_FILE
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/$SERVICE_USER/.Xauthority
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
 ExecStartPre=+/bin/bash $PROJECT_DIR/splash_helper.sh start
@@ -341,46 +338,8 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl unmask getty@tty1 2>/dev/null || true  # Chromium a besoin du TTY pour X
+systemctl mask getty@tty1 2>/dev/null || true
 systemctl enable "${SERVICE_NAME}.service"
-
-# ─── 7b. Configuration X11 / autologin pour Chromium kiosk
-echo "[7b/8] Configuration X11 et autologin..."
-
-# Autologin de SERVICE_USER sur tty1 (nécessaire pour que startx puisse ouvrir le display)
-AUTOLOGIN_DIR="/etc/systemd/system/getty@tty1.service.d"
-mkdir -p "$AUTOLOGIN_DIR"
-cat > "$AUTOLOGIN_DIR/autologin.conf" << AEOF
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin $SERVICE_USER --noclear %I \$TERM
-AEOF
-
-# .xinitrc : disable screensaver/blanking, start openbox (WM minimal) en arrière-plan
-XINITRC="/home/$SERVICE_USER/.xinitrc"
-cat > "$XINITRC" << XEOF
-#!/bin/sh
-xset s off
-xset s noblank
-xset -dpms
-exec openbox-session
-XEOF
-chmod +x "$XINITRC"
-chown "$SERVICE_USER:$SERVICE_USER" "$XINITRC"
-
-# .bash_profile : si session interactive sur tty1 et pas de DISPLAY, lancer startx
-BASH_PROFILE="/home/$SERVICE_USER/.bash_profile"
-if ! grep -q "startx" "$BASH_PROFILE" 2>/dev/null; then
-  cat >> "$BASH_PROFILE" << BEOF
-
-# RMG Signage — démarrer X automatiquement sur tty1
-if [ -z "\$DISPLAY" ] && [ "\$(tty)" = "/dev/tty1" ]; then
-  exec startx -- -nocursor 2>/dev/null
-fi
-BEOF
-  chown "$SERVICE_USER:$SERVICE_USER" "$BASH_PROFILE"
-fi
-echo "  → X11 autologin configuré pour $SERVICE_USER"
 
 # ─── 8. Vérification et résumé
 echo "[8/8] Vérification finale..."

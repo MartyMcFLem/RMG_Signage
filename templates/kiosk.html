@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RMG Signage — Kiosk</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      cursor: none;
+    }
+    #media-container {
+      position: relative;
+      width: 100%; height: 100%;
+    }
+    /* Image display */
+    #media-img {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    /* Video display */
+    #media-video {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: none;
+      background: #000;
+    }
+    /* Welcome / no-media screen */
+    #welcome {
+      display: none;
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      background: #000;
+    }
+    #welcome img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <div id="media-container">
+    <img  id="media-img"   src="" alt="">
+    <video id="media-video" src="" muted autoplay playsinline></video>
+    <div  id="welcome">
+      <!-- L'écran de bienvenue PNG est servi via /media/.welcome_screen.png quand disponible -->
+      <img id="welcome-img" src="" alt="RMG Signage">
+    </div>
+  </div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   RMG Signage — Kiosk slideshow
+   Architecture :
+   - Toutes les 2 s, poll /api/kiosk/state pour détecter les changements
+     de playlist (génération) ou l'action "suivant" déclenchée depuis l'UI.
+   - La rotation CSS est appliquée via transform sur le conteneur.
+   - Les durées par fichier (file_durations) sont respectées.
+   - Les vidéos jouent jusqu'à leur fin (ou sont arrêtées si l'UI demande "suivant").
+   ═══════════════════════════════════════════════════ */
+
+const POLL_INTERVAL_MS  = 2000;   // fréquence de poll de l'état
+const DEFAULT_DURATION  = 8;      // secondes par défaut pour les images
+
+let _state = {
+  generation: -1,
+  files: [],
+  config: {
+    image_duration: DEFAULT_DURATION,
+    shuffle: false,
+    loop: true,
+    rotation: 0,
+    single_file_mode: false,
+    file_durations: {},
+  },
+};
+
+let _playlist  = [];   // liste courante (potentiellement mélangée)
+let _index     = 0;    // index courant dans _playlist
+let _timer     = null; // setTimeout pour avancer l'image
+let _playing   = false;
+
+const imgEl     = document.getElementById('media-img');
+const videoEl   = document.getElementById('media-video');
+const welcomeEl = document.getElementById('welcome');
+const welcomeImg = document.getElementById('welcome-img');
+const container = document.getElementById('media-container');
+
+/* ── Rotation ────────────────────────────────────── */
+function applyRotation(deg) {
+  const d = parseInt(deg) || 0;
+  if (d === 90 || d === 270) {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const scale = Math.min(vw / vh, vh / vw);
+    container.style.transform = `rotate(${d}deg) scale(${scale})`;
+  } else {
+    container.style.transform = `rotate(${d}deg)`;
+  }
+}
+
+/* ── Helpers ─────────────────────────────────────── */
+const VIDEO_EXT = /\.(mp4|avi|mkv|mov|webm|m4v)$/i;
+const isVideo = f => VIDEO_EXT.test(f);
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildPlaylist(state) {
+  let files = [...state.files];
+  if (state.config.shuffle) files = shuffle(files);
+  return files;
+}
+
+/* ── Affichage ───────────────────────────────────── */
+function hideAll() {
+  imgEl.style.display   = 'none';
+  videoEl.style.display = 'none';
+  welcomeEl.style.display = 'none';
+  videoEl.pause();
+  clearTimeout(_timer);
+  _timer = null;
+}
+
+function showWelcome() {
+  hideAll();
+  // Essaie d'afficher l'écran de bienvenue généré par Flask (si dispo)
+  const ts = Date.now();
+  welcomeImg.src = `/media/.welcome_screen.png?t=${ts}`;
+  welcomeEl.style.display = 'block';
+}
+
+function showMedia(filename) {
+  hideAll();
+  if (isVideo(filename)) {
+    videoEl.src = `/media/${encodeURIComponent(filename)}`;
+    videoEl.style.display = 'block';
+    videoEl.load();
+    videoEl.play().catch(() => {});
+    // Avancer quand la vidéo se termine
+    videoEl.onended = () => advance();
+    videoEl.onerror = () => { setTimeout(() => advance(), 1000); };
+  } else {
+    const dur = (_state.config.file_durations[filename] ?? _state.config.image_duration ?? DEFAULT_DURATION) * 1000;
+    imgEl.src = `/media/${encodeURIComponent(filename)}`;
+    imgEl.style.display = 'block';
+    imgEl.onerror = () => { setTimeout(() => advance(), 1000); };
+    _timer = setTimeout(() => advance(), dur);
+  }
+}
+
+function advance() {
+  if (_playlist.length === 0) { showWelcome(); return; }
+  _index = (_index + 1) % _playlist.length;
+  // Reboucler : si loop=false et on a fait le tour, s'arrêter sur la dernière
+  if (!_state.config.loop && _index === 0) {
+    _index = _playlist.length - 1;
+    showMedia(_playlist[_index]);
+    return;
+  }
+  showMedia(_playlist[_index]);
+}
+
+/* ── Chargement de la playlist ───────────────────── */
+function loadPlaylist(state, preserveIndex) {
+  _state = state;
+  applyRotation(state.config.rotation);
+
+  const newPlaylist = buildPlaylist(state);
+
+  if (newPlaylist.length === 0) {
+    _playlist = [];
+    _index = 0;
+    showWelcome();
+    return;
+  }
+
+  const prevFile = _playlist[_index];
+  _playlist = newPlaylist;
+
+  if (!preserveIndex) {
+    // Nouveau contenu : recommencer depuis le début
+    _index = 0;
+  } else if (prevFile) {
+    // Essayer de rester sur le même fichier si possible
+    const ni = _playlist.indexOf(prevFile);
+    _index = ni >= 0 ? ni : 0;
+  }
+
+  showMedia(_playlist[_index]);
+}
+
+/* ── Poll de l'état serveur ──────────────────────── */
+async function pollState() {
+  try {
+    const resp = await fetch('/api/kiosk/state');
+    if (!resp.ok) return;
+    const state = await resp.json();
+
+    // L'UI a demandé "suivant"
+    if (state.next) {
+      advance();
+      return;
+    }
+
+    // La playlist a changé (upload, config, restart, etc.)
+    if (state.generation !== _state.generation) {
+      loadPlaylist(state, false);
+      return;
+    }
+
+    // Mettre à jour silencieusement la config (durées, rotation…)
+    _state.config = state.config;
+    applyRotation(state.config.rotation);
+
+  } catch (e) {
+    // Flask temporairement indisponible — on attend
+  }
+}
+
+/* ── Démarrage ───────────────────────────────────── */
+async function init() {
+  try {
+    const resp = await fetch('/api/kiosk/state');
+    if (resp.ok) {
+      const state = await resp.json();
+      loadPlaylist(state, false);
+    } else {
+      showWelcome();
+    }
+  } catch (e) {
+    showWelcome();
+    // Réessayer dans 3 s si Flask n'est pas encore prêt
+    setTimeout(init, 3000);
+    return;
+  }
+  setInterval(pollState, POLL_INTERVAL_MS);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', () => applyRotation(_state.config.rotation));
+</script>
+</body>
+</html>

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RMG Signage</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- Mobile hamburger -->
+  <button class="hamburger" id="hamburger" onclick="toggleNav()">&#9776;</button>
+  <div class="nav-overlay" id="navOverlay" onclick="toggleNav()"></div>
+
+  <!-- ── Sidebar Navigation ───────────────────────────── -->
+  <nav class="sidebar-nav" id="sidebarNav">
+    <div class="nav-brand">
+      <img id="siteLogo" src="/static/logo.png" alt=""
+           onerror="this.style.display='none'">
+      <div>
+        <div class="nav-brand-text">RMG Signage</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <button class="nav-link active" data-page="dashboard" onclick="goTo('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </button>
+      <div class="nav-group" id="navGroupMedias">
+        <button class="nav-link" onclick="toggleMediasNav()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/><line x1="17" y1="17" x2="22" y2="17"/></svg>
+          Medias
+          <span class="nav-chevron">&#9654;</span>
+        </button>
+        <div class="nav-sub">
+          <button class="nav-link" data-page="medias" onclick="goTo('medias')">Fichiers</button>
+          <button class="nav-link" data-page="playlists" onclick="goTo('playlists')">Playlists</button>
+        </div>
+      </div>
+      <button class="nav-link" data-page="settings" onclick="goTo('settings')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Parametres
+      </button>
+    </div>
+    <div class="nav-footer">
+      <div id="navVersion" style="margin-bottom:4px">--</div>
+      <div class="nav-serial" id="navSerialFull">--</div>
+    </div>
+  </nav>
+
+  <!-- ── Main Content ─────────────────────────────────── -->
+  <div class="main-content">
+
+    <!-- ═══════════ DASHBOARD ═══════════ -->
+    <section class="page-section active" id="page-dashboard">
+      <div class="page-head">
+        <h1>Dashboard</h1>
+        <p>Vue d'ensemble de votre systeme d'affichage</p>
+      </div>
+
+      <div class="dash-alert dash-alert-update" id="dashUpdateAlert" onclick="goTo('settings')">
+        <div class="dash-alert-icon">&#8593;</div>
+        <div class="dash-alert-text">
+          <strong>Mise a jour disponible</strong>
+          <span>Une nouvelle version est disponible. Rendez-vous dans Parametres pour l'installer.</span>
+        </div>
+        <button class="dash-alert-action" onclick="event.stopPropagation();goTo('settings')">Mettre a jour</button>
+      </div>
+
+      <div class="dash-grid">
+        <div class="stat-card">
+          <div class="stat-label">Statut lecteur</div>
+          <div class="stat-value" id="dashMpvStatus">--</div>
+          <div class="stat-sub" id="dashMpvSub"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Medias</div>
+          <div class="stat-value" id="dashMediaCount">0</div>
+          <div class="stat-sub" id="dashMediaSub">fichiers</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Licence</div>
+          <div class="stat-value" id="dashLicense">--</div>
+          <div class="stat-sub" id="dashLicenseSub"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Stockage medias</h2></div>
+        <div class="card-body">
+          <div class="storage-label">
+            <span id="storageUsed">--</span>
+            <span id="storageTotal">--</span>
+          </div>
+          <div class="storage-bar">
+            <div class="storage-fill" id="storageFill" style="width:0%"></div>
+          </div>
+          <div class="storage-meta">
+            <span id="storagePct"></span>
+            <span class="storage-files-badge" id="storageFiles">-- fichiers</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Lecteur</h2></div>
+        <div class="card-body">
+          <div class="player-panel">
+            <div class="player-now" id="playerNow">
+              <div class="player-now-dot" id="playerDot"></div>
+              <div class="player-now-info">
+                <div class="player-now-label" id="playerLabel">Lecteur</div>
+                <div class="player-now-title" id="playerTitle">--</div>
+              </div>
+            </div>
+            <div class="player-controls">
+              <button class="player-btn" onclick="control('restart')" title="Redemarrer">
+                <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                <span>Relancer</span>
+              </button>
+              <button class="player-btn accent" onclick="control('next')" title="Suivant">
+                <svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                <span>Suivant</span>
+              </button>
+              <button class="player-btn danger" onclick="control('stop')" title="Arreter">
+                <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                <span>Arreter</span>
+              </button>
+              <button class="player-btn player-btn-wide" onclick="control('show-ip')" title="Afficher IP">
+                <svg viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Afficher IP sur ecran</span>
+              </button>
+              <button class="player-btn player-btn-wide" id="playAllBtn" style="display:none;background:#059669;border-color:#059669;color:#fff" onclick="playAll()">
+                <svg viewBox="0 0 24 24" style="stroke:#fff"><polygon points="5 3 19 12 5 21"/></svg>
+                <span style="color:#fff;font-size:13px">Lire tous les medias</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ MEDIAS (Fichiers) ═══════════ -->
+    <section class="page-section" id="page-medias">
+      <div class="page-head">
+        <h1>Fichiers</h1>
+        <p><span id="galleryCount">0 fichier</span></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Ajouter des medias</h2></div>
+        <div class="card-body">
+          <div class="upload-zone" id="uploadZone"
+               onclick="document.getElementById('fileInput').click()">
+            <p style="font-size:28px;margin-bottom:8px">&#9729;</p>
+            <p>Glissez vos photos &amp; videos ici<br>ou cliquez pour choisir</p>
+            <span class="btn btn-blue btn-sm" style="margin-top:10px">Parcourir...</span>
+          </div>
+          <div class="upload-progress" id="uploadProgress">
+            <div class="upload-progress-bar"></div>
+          </div>
+          <input type="file" id="fileInput" multiple accept="image/*,video/*">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Fichiers</h2>
+          <span style="font-size:12px;color:var(--text-2)" id="headerCount">0</span>
+        </div>
+        <div class="card-body">
+          <div class="note note-warn" id="shuffleNote" style="display:none">
+            Mode aleatoire active -- desactivez-le dans les parametres pour personnaliser l'ordre.
+          </div>
+          <div class="note note-info" id="orderNote" style="display:none">
+            Glissez-deposez les vignettes pour definir l'ordre de lecture.
+          </div>
+          <div class="gallery" id="gallery"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ PLAYLISTS ═══════════ -->
+    <section class="page-section" id="page-playlists">
+      <div class="page-head">
+        <h1>Playlists</h1>
+        <p>Organisez vos medias en playlists</p>
+      </div>
+
+      <div id="plActiveBanner" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);font-size:13px;align-items:center;gap:10px">
+        <span class="status-dot on" style="margin:0"></span>
+        <span>Playlist active : <strong id="plActiveName"></strong></span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="deactivatePlaylist()">Lire tout</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Mes playlists</h2>
+          <button class="btn btn-blue btn-sm" onclick="openPlModal()">+ Nouvelle playlist</button>
+        </div>
+        <div class="card-body">
+          <div class="pl-list" id="plList">
+            <div class="pl-empty">Aucune playlist. Cliquez sur "+ Nouvelle playlist" pour commencer.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ Playlist Modal ═══════════ -->
+    <div class="modal-overlay" id="plModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h3 id="plModalTitle">Nouvelle playlist</h3>
+          <button class="modal-close" onclick="closePlModal()">&#10005;</button>
+        </div>
+        <div class="modal-body">
+          <div style="margin-bottom:16px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:6px">Nom de la playlist</label>
+            <input type="text" id="plModalName" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)" placeholder="Ex: Promo ete 2026">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:8px">Selectionner les medias</label>
+            <div class="media-picker" id="plModalPicker"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closePlModal()">Annuler</button>
+          <button class="btn btn-blue" id="plModalSave" onclick="savePlModal()">Creer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SETTINGS ═══════════ -->
+    <section class="page-section" id="page-settings">
+      <div class="page-head">
+        <h1>Parametres</h1>
+        <p>Configuration de l'affichage et du systeme</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Affichage</h2></div>
+        <div class="card-body">
+          <div class="setting-row">
+            <div><div class="setting-label">Duree par defaut</div><div class="setting-hint">Secondes par image</div></div>
+            <input type="number" class="num-input" id="duration" min="1" max="300" onchange="updateConfig()">
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Mode aleatoire</div><div class="setting-hint">Melanger l'ordre de lecture</div></div>
+            <label class="tog"><input type="checkbox" id="shuffle" onchange="updateConfig()"><span class="tog-track"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Boucle infinie</div><div class="setting-hint">Recommencer automatiquement</div></div>
+            <label class="tog"><input type="checkbox" id="loop" onchange="updateConfig()"><span class="tog-track"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Mode sombre</div><div class="setting-hint">Theme de l'interface</div></div>
+            <label class="tog"><input type="checkbox" id="darkMode" onchange="updateConfig()"><span class="tog-track"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Rotation affichage</div><div class="setting-hint">Rotation de l'ecran</div></div>
+            <select class="rot-select" id="rotation" onchange="updateConfig()">
+              <option value="0">0 (normal)</option>
+              <option value="90">90</option>
+              <option value="180">180 (inverse)</option>
+              <option value="270">270</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Logo</h2></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:12px">
+            <img id="logoPreview" src="/static/logo.png" alt=""
+                 style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:1px solid var(--border)"
+                 onerror="this.style.display='none'">
+            <input type="file" id="logoInput" accept="image/*" style="display:none"
+                   onchange="uploadLogo(this.files)">
+            <button class="btn btn-ghost btn-sm" onclick="var i=document.getElementById('logoInput');i.value='';i.click()">Changer</button>
+            <button class="btn btn-ghost btn-sm" onclick="removeLogo()">Supprimer</button>
+          </div>
+          <div class="setting-hint" style="margin-top:8px">512x512px recommande</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Licence</h2></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+            <span>Niveau :</span>
+            <span class="license-badge" id="licenseBadge">--</span>
+            <span style="font-size:12px;color:var(--text-2)" id="licenseQuota"></span>
+            <span style="font-size:12px;color:var(--text-3)" id="licenseMaxFiles"></span>
+          </div>
+          <div style="font-size:12px;color:var(--text-3)" id="licenseKeyPreview"></div>
+          <div class="license-input-row">
+            <input type="text" class="license-input" id="licenseKeyInput"
+                   placeholder="RMGS-XXXXX-XXXXX-XXXXX" maxlength="24"
+                   onkeydown="if(event.key==='Enter')activateLicense()">
+            <button class="btn btn-blue" onclick="activateLicense()">Activer</button>
+          </div>
+          <div class="setting-hint" style="margin-top:6px">Entrez votre cle de licence pour debloquer plus d'espace de stockage</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Mise a jour</h2></div>
+        <div class="card-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span id="gitInfo"><span style="color:var(--text-2);font-size:12px">Chargement...</span></span>
+          </div>
+          <button class="btn btn-blue" id="updateBtn" onclick="runUpdate()">Mettre a jour</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -11,14 +11,15 @@ log() {
 
 log "=== Demarrage du service rmg_signage ==="
 
-# Chromium kiosk requiert un serveur X sur :0
-# On exporte DISPLAY pour que upload.py puisse le passer à Chromium au démarrage.
-export DISPLAY="${DISPLAY:-:0}"
-log "USER=$USER | HOME=$HOME | PORT=$FLASK_PORT | DISPLAY=$DISPLAY"
+# Mode headless (Pi OS Lite sans X11)
+unset DISPLAY 2>/dev/null || true
+log "USER=$USER | HOME=$HOME | PORT=$FLASK_PORT"
 
 MEDIA_DIR="${RMG_SIGNAGE_MEDIA_DIR:-/home/rmg/signage/medias}"
 mkdir -p "$MEDIA_DIR"
 log "Dossier media : $MEDIA_DIR"
+
+rm -f /tmp/mpv-socket 2>/dev/null || true
 
 SCRIPT_DIR="${RMG_SIGNAGE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 SCRIPT_PATH="$SCRIPT_DIR/upload.py"

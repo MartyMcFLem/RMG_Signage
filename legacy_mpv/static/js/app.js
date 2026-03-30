@@ -58,15 +58,14 @@ async function loadDashboard() {
       _safe('/api/license'),
     ]);
 
-    const playerEl = document.getElementById('dashMpvStatus');
-    const playerSub = document.getElementById('dashMpvSub');
-    const isRunning = status.player_running ?? status.mpv_running;
-    if (isRunning) {
-      playerEl.innerHTML = '<span class="status-dot on"></span>Actif';
-      playerSub.textContent = status.media_count + ' medias charges';
+    const mpvEl = document.getElementById('dashMpvStatus');
+    const mpvSub = document.getElementById('dashMpvSub');
+    if (status.mpv_running) {
+      mpvEl.innerHTML = '<span class="status-dot on"></span>Actif';
+      mpvSub.textContent = status.media_count + ' medias charges';
     } else {
-      playerEl.innerHTML = '<span class="status-dot off"></span>Arrete';
-      playerSub.textContent = '';
+      mpvEl.innerHTML = '<span class="status-dot off"></span>Arrete';
+      mpvSub.textContent = '';
     }
 
     document.getElementById('dashMediaCount').textContent = status.media_count;
@@ -112,8 +111,7 @@ async function loadDashboard() {
     const dot = document.getElementById('playerDot');
     const pLabel = document.getElementById('playerLabel');
     const pTitle = document.getElementById('playerTitle');
-    const isRunning2 = status.player_running ?? status.mpv_running;
-    if (isRunning2) {
+    if (status.mpv_running) {
       dot.className = 'player-now-dot on';
       pLabel.textContent = 'En lecture';
       pTitle.textContent = status.media_count + ' media' + (status.media_count > 1 ? 's' : '') + ' en rotation';

@@ -7,6 +7,7 @@ import subprocess
 import time
 import json
 import shutil
+import shlex
 import uuid as _uuid
 
 # === CONFIG ===
@@ -14,13 +15,11 @@ HOME_DIR = os.path.expanduser("~")
 MEDIA_DIR = os.environ.get("RMG_SIGNAGE_MEDIA_DIR", "/home/rmg/signage/medias")
 CONFIG_FILE = os.environ.get("RMG_SIGNAGE_CONFIG_FILE", os.path.join(MEDIA_DIR, "config.json"))
 
-CHROMIUM_BINARY = (
-    shutil.which("chromium-browser")
-    or shutil.which("chromium")
-    or "chromium-browser"
-)
+MPV_BINARY = shutil.which("mpv") or "mpv"
 GIT_BINARY = shutil.which("git") or "/usr/bin/git"
-LOG_FILE = os.path.join(MEDIA_DIR, "rmg_signage.log")
+MPV_EXTRA_ARGS = os.environ.get("MPV_EXTRA_ARGS", "")
+MPV_CONF_DIR = os.environ.get("MPV_CONF_DIR", os.path.join(HOME_DIR, ".config", "mpv"))
+LOG_FILE = os.path.join(MEDIA_DIR, "rmg_signage-mpv.log")
 
 # Branche git et port Flask — injectés par systemd selon l'environnement (prod/dev)
 GIT_BRANCH = os.environ.get("RMG_SIGNAGE_BRANCH", "main")
@@ -70,13 +69,9 @@ if os.path.exists(CONFIG_FILE):
     except:
         pass
 
-player_process = None
-_player_lock = threading.Lock()
-# Compteur de génération : incrémenté à chaque restart_chromium().
-# La page kiosk le lit via /api/kiosk/state pour détecter un changement de playlist.
-_playlist_generation = 0
-# Événement utilisé pour signaler «passer au média suivant» depuis l'API.
-_kiosk_next_event = threading.Event()
+mpv_process = None
+_mpv_lock = threading.Lock()
+MPV_SOCKET = "/tmp/mpv-socket"
 
 # Taille maximale d'upload : 500 Mo
 MAX_UPLOAD_SIZE = 500 * 1024 * 1024
@@ -316,20 +311,36 @@ def get_device_serial():
     return _device_serial
 
 
-def notify_kiosk_reload():
-    """Incrémente le compteur de génération pour que la page kiosk recharge sa playlist."""
-    global _playlist_generation
-    _playlist_generation += 1
+def send_mpv_command(command):
+    """Envoie une commande à MPV via le socket IPC"""
+    try:
+        import socket
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(MPV_SOCKET)
+        sock.send((json.dumps({"command": command}) + "\n").encode('utf-8'))
+        sock.close()
+        return True
+    except:
+        return False
 
 
-def update_player_playlist():
-    """Met à jour la playlist : notifie la page kiosk ou redémarre Chromium si nécessaire."""
-    global player_process
-    if player_process is None or player_process.poll() is not None:
-        restart_chromium()
+def update_mpv_playlist():
+    """Met à jour la playlist MPV sans redémarrer (si possible)"""
+    global mpv_process
+    if mpv_process is None or mpv_process.poll() is not None:
+        restart_mpv()
         return
-    notify_kiosk_reload()
-
+    try:
+        if config.get('single_file_mode') and config.get('selected_file'):
+            selected_path = os.path.join(MEDIA_DIR, config['selected_file'])
+            if os.path.exists(selected_path):
+                send_mpv_command(["loadfile", selected_path, "replace"])
+                send_mpv_command(["set_property", "loop-file", "inf"])
+                time.sleep(0.2)
+                return
+        restart_mpv()
+    except:
+        restart_mpv()
 
 
 def get_app_version():
@@ -359,10 +370,39 @@ def is_media_file(filename):
                    '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'}
 
 
-def get_kiosk_url():
-    """Retourne l'URL de la page kiosk Chromium."""
-    return f"http://127.0.0.1:{FLASK_PORT}/kiosk"
-
+def generate_lua_script():
+    """Génère le script Lua mpv pour appliquer les durées personnalisées par fichier"""
+    mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
+    os.makedirs(mpv_conf_dir, exist_ok=True)
+    script_path = os.path.join(mpv_conf_dir, "per_file_duration.lua")
+    # Utiliser des slashes Unix dans le script Lua (tourne sur Raspberry Pi)
+    config_path_lua = CONFIG_FILE.replace('\\', '/')
+    lua = "\n".join([
+        "-- Script MPV : duree personnalisee par fichier",
+        "local utils = require 'mp.utils'",
+        "mp.register_event(\"start-file\", function()",
+        "    local path = mp.get_property(\"path\")",
+        "    if not path then return end",
+        "    local _, filename = utils.split_path(path)",
+        "    local f = io.open(\"" + config_path_lua + "\", \"r\")",
+        "    if not f then return end",
+        "    local content = f:read(\"*all\")",
+        "    f:close()",
+        "    local cfg = utils.parse_json(content)",
+        "    if not cfg or not cfg.file_durations then return end",
+        "    local dur = cfg.file_durations[filename]",
+        "    if dur and type(dur) == \"number\" then",
+        "        mp.set_property_number(\"image-display-duration\", dur)",
+        "    end",
+        "end)",
+        ""
+    ])
+    try:
+        with open(script_path, 'w') as f:
+            f.write(lua)
+    except:
+        pass
+    return script_path
 
 
 def get_local_ip(retries=8, delay=2.0):
@@ -525,7 +565,95 @@ def generate_welcome_screen():
         return None
 
 
+def get_mpv_cmd():
+    """Génère la commande mpv avec la config actuelle"""
+    mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
+    os.makedirs(mpv_conf_dir, exist_ok=True)
 
+    lua_script = generate_lua_script()
+    lua_script = lua_script if os.path.exists(lua_script) else None
+
+    mpv_conf = os.path.join(mpv_conf_dir, "mpv.conf")
+    try:
+        with open(mpv_conf, 'w') as f:
+            f.write("fs=yes\n")
+            f.write("border=no\n")
+            f.write("osd-bar=no\n")
+            f.write("background=0.0/0.0/0.0\n")
+            f.write("panscan=0.0\n")  # 0 = fit (image entiere visible, barres noires si ratio different)
+            f.write(f"image-display-duration={config['image_duration']}\n")
+            f.write(f"video-rotate={config.get('rotation', 0)}\n")
+            f.write(f"input-ipc-server={MPV_SOCKET}\n")
+    except:
+        pass
+
+    rotation = config.get('rotation', 0)
+
+    # Mode fichier unique
+    if config.get('single_file_mode') and config.get('selected_file'):
+        selected_path = os.path.join(MEDIA_DIR, config['selected_file'])
+        if os.path.exists(selected_path):
+            cmd_single = [MPV_BINARY, f"--config-dir={mpv_conf_dir}"]
+            if lua_script:
+                cmd_single.append(f"--script={lua_script}")
+            cmd_single.append(f"--video-rotate={rotation}")
+            cmd_single += ["--loop-file=inf", selected_path]
+            return cmd_single
+
+    # Mode playlist
+    try:
+        all_files = [f for f in os.listdir(MEDIA_DIR)
+                     if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)]
+    except:
+        all_files = []
+
+    if not all_files:
+        welcome_path = os.path.join(MEDIA_DIR, ".welcome_screen.png")
+        if os.path.exists(welcome_path) and (time.time() - os.path.getmtime(welcome_path)) < 300:
+            welcome = welcome_path
+        else:
+            welcome = generate_welcome_screen()
+        if welcome and os.path.exists(welcome):
+            return [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", welcome]
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        splash_path = os.path.join(script_dir, 'static', 'splash.png')
+        if os.path.exists(splash_path):
+            return [MPV_BINARY, f"--config-dir={mpv_conf_dir}", f"--video-rotate={rotation}", "--loop-file=inf", splash_path]
+        return None
+
+    # Si une playlist est active, filtrer les fichiers
+    active_pl_id = config.get('active_playlist')
+    if active_pl_id:
+        playlists = config.get('playlists', [])
+        pl = next((p for p in playlists if p.get('id') == active_pl_id), None)
+        if pl and pl.get('files'):
+            all_set = set(all_files)
+            pl_files = [f for f in pl['files'] if f in all_set]
+            if pl_files:
+                final_files = pl_files
+            else:
+                final_files = sorted(all_files)
+        else:
+            final_files = sorted(all_files)
+    elif not config.get('shuffle') and config.get('file_order'):
+        order = config['file_order']
+        all_set = set(all_files)
+        ordered = [f for f in order if f in all_set]
+        remaining = sorted(f for f in all_files if f not in set(ordered))
+        final_files = ordered + remaining
+    else:
+        final_files = sorted(all_files)
+
+    cmd = [MPV_BINARY, f"--config-dir={mpv_conf_dir}"]
+    if lua_script:
+        cmd.append(f"--script={lua_script}")
+    cmd.append(f"--video-rotate={rotation}")
+    if config['loop']:
+        cmd.append("--loop-playlist=inf")
+    if config['shuffle']:
+        cmd.append("--shuffle")
+    cmd.extend(os.path.join(MEDIA_DIR, f) for f in final_files)
+    return cmd
 
 
 # === FLASK APP ===
@@ -559,7 +687,7 @@ def upload():
             f.save(path)
             files_saved += 1
         if files_saved:
-            update_player_playlist()
+            update_mpv_playlist()
         if reject_reason and files_saved == 0:
             return redirect("/?error=" + reject_reason)
         return redirect("/")
@@ -653,8 +781,8 @@ def activate_license():
 
 @app.route("/api/status")
 def get_status():
-    """Retourne l'état actuel du lecteur Chromium"""
-    running = player_process is not None and player_process.poll() is None
+    """Retourne l'état actuel de mpv"""
+    running = mpv_process is not None and mpv_process.poll() is None
     try:
         media_count = len([f for f in os.listdir(MEDIA_DIR)
                            if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)])
@@ -662,8 +790,7 @@ def get_status():
         media_count = 0
     storage = get_storage_info()
     return jsonify({
-        "mpv_running": running,   # conservé pour compatibilité avec l'interface web existante
-        "player_running": running,
+        "mpv_running": running,
         "media_count": media_count,
         "media_dir": MEDIA_DIR,
         "serial": get_device_serial(),
@@ -687,68 +814,6 @@ def list_files():
 def serve_media(filename):
     return send_from_directory(MEDIA_DIR, filename)
 
-
-@app.route("/kiosk")
-def kiosk_page():
-    """Page de lecture kiosk servie par Chromium en plein écran."""
-    return render_template('kiosk.html')
-
-
-@app.route("/api/kiosk/state")
-def kiosk_state():
-    """Retourne l'état courant pour la page kiosk :
-    liste des médias à afficher, config et compteur de génération.
-    La page kiosk poll ce endpoint pour détecter les changements de playlist."""
-    try:
-        all_files = [f for f in os.listdir(MEDIA_DIR)
-                     if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)]
-    except Exception:
-        all_files = []
-
-    if config.get('single_file_mode') and config.get('selected_file'):
-        sel = config['selected_file']
-        if sel in all_files:
-            playlist_files = [sel]
-        else:
-            playlist_files = []
-    else:
-        active_pl_id = config.get('active_playlist')
-        if active_pl_id:
-            playlists = config.get('playlists', [])
-            pl = next((p for p in playlists if p.get('id') == active_pl_id), None)
-            if pl and pl.get('files'):
-                all_set = set(all_files)
-                pl_files = [f for f in pl['files'] if f in all_set]
-                playlist_files = pl_files if pl_files else sorted(all_files)
-            else:
-                playlist_files = sorted(all_files)
-        elif not config.get('shuffle') and config.get('file_order'):
-            order = config['file_order']
-            all_set = set(all_files)
-            ordered = [f for f in order if f in all_set]
-            remaining = sorted(f for f in all_files if f not in set(ordered))
-            playlist_files = ordered + remaining
-        else:
-            playlist_files = sorted(all_files)
-
-    # Vérifier si un événement «suivant» a été déclenché
-    next_triggered = _kiosk_next_event.is_set()
-    if next_triggered:
-        _kiosk_next_event.clear()
-
-    return jsonify({
-        "generation": _playlist_generation,
-        "files": playlist_files,
-        "config": {
-            "image_duration": config.get('image_duration', 8),
-            "shuffle": config.get('shuffle', True),
-            "loop": config.get('loop', True),
-            "rotation": config.get('rotation', 0),
-            "single_file_mode": config.get('single_file_mode', False),
-            "file_durations": config.get('file_durations', {}),
-        },
-        "next": next_triggered,
-    })
 
 @app.route("/api/delete/<filename>", methods=["DELETE"])
 def delete_file(filename):
@@ -793,10 +858,21 @@ def manage_config():
         except:
             pass
 
-        # Notifier la page kiosk du changement de configuration
-        notify_kiosk_reload()
-        if player_process is None or player_process.poll() is not None:
-            restart_chromium()
+        if mpv_process and mpv_process.poll() is None:
+            if old_config.get('shuffle') != config.get('shuffle'):
+                send_mpv_command(["set_property", "shuffle", config['shuffle']])
+            if not config.get('single_file_mode') and old_config.get('loop') != config.get('loop'):
+                loop_value = "inf" if config['loop'] else "no"
+                send_mpv_command(["set_property", "loop-playlist", loop_value])
+            if old_config.get('image_duration') != config.get('image_duration'):
+                restart_mpv()
+            elif old_config.get('shuffle') != config.get('shuffle'):
+                restart_mpv()
+            elif old_config.get('rotation') != config.get('rotation'):
+                send_mpv_command(["set_property", "video-rotate", config.get('rotation', 0)])
+                restart_mpv()
+        else:
+            restart_mpv()
 
         return jsonify({"success": True, "message": "Configuration mise à jour"})
     return jsonify(config)
@@ -814,7 +890,7 @@ def save_order():
     except:
         pass
     if not config.get('shuffle'):
-        notify_kiosk_reload()
+        restart_mpv()
     return jsonify({"success": True, "message": "Ordre sauvegardé"})
 
 
@@ -835,32 +911,33 @@ def set_file_duration(filename):
             json.dump(config, f, indent=2)
     except:
         pass
-    # La page kiosk relit la config au prochain cycle — pas besoin de redémarrer Chromium
+    # Le script Lua relit la config à chaque fichier — pas besoin de redémarrer mpv
     return jsonify({"success": True, "message": f"Durée mise à jour pour {filename}"})
 
 
 @app.route("/api/control/<action>", methods=["POST"])
-def control_player(action):
-    global player_process
+def control_mpv(action):
+    global mpv_process
     if action == "restart":
-        restart_chromium()
-        return jsonify({"success": True, "message": "Lecteur redémarré"})
+        restart_mpv()
+        return jsonify({"success": True, "message": "MPV redémarré"})
     elif action == "stop":
-        if player_process:
-            player_process.terminate()
-            player_process = None
-        return jsonify({"success": True, "message": "Lecteur arrêté"})
+        if mpv_process:
+            mpv_process.terminate()
+            mpv_process = None
+        return jsonify({"success": True, "message": "MPV arrêté"})
     elif action == "next":
-        # Signaler à la page kiosk de passer au média suivant
-        _kiosk_next_event.set()
-        return jsonify({"success": True, "message": "Fichier suivant"})
+        if send_mpv_command(["playlist-next"]):
+            return jsonify({"success": True, "message": "Fichier suivant"})
+        return jsonify({"success": False, "message": "Commande échouée"}), 500
     elif action == "show-ip":
-        # Générer l'écran de bienvenue et forcer la page kiosk à l'afficher
-        generate_welcome_screen()
-        notify_kiosk_reload()
-        if player_process is None or player_process.poll() is not None:
-            restart_chromium()
-        return jsonify({"success": True, "message": "Écran de connexion affiché"})
+        welcome = generate_welcome_screen()
+        if welcome and os.path.exists(welcome):
+            mpv_conf_dir = MPV_CONF_DIR or os.path.join(MEDIA_DIR, ".config")
+            cmd = [MPV_BINARY, f"--config-dir={mpv_conf_dir}", "--loop-file=inf", welcome]
+            restart_mpv(override_cmd=cmd)
+            return jsonify({"success": True, "message": "Écran de connexion affiché"})
+        return jsonify({"success": False, "message": "Impossible de générer l'écran"}), 500
     return jsonify({"success": False, "message": "Action inconnue"}), 400
 
 
@@ -878,7 +955,7 @@ def play_single_file(filename):
             json.dump(config, f, indent=2)
     except:
         pass
-    restart_chromium()
+    restart_mpv()
     return jsonify({"success": True, "message": f"Affichage de {filename} uniquement"})
 
 
@@ -893,7 +970,7 @@ def play_all_files():
             json.dump(config, f, indent=2)
     except:
         pass
-    restart_chromium()
+    restart_mpv()
     return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
 
 
@@ -947,7 +1024,7 @@ def deactivate_playlist():
             json.dump(config, f, indent=2)
     except:
         pass
-    notify_kiosk_reload()
+    restart_mpv()
     return jsonify({"success": True, "message": "Lecture de tous les fichiers"})
 
 
@@ -978,7 +1055,7 @@ def update_playlist(pl_id):
     except:
         pass
     if config.get('active_playlist') == pl_id:
-        notify_kiosk_reload()
+        restart_mpv()
     return jsonify({"success": True, "playlist": pl})
 
 
@@ -993,7 +1070,7 @@ def delete_playlist(pl_id):
         return jsonify({"success": False, "message": "Playlist introuvable"}), 404
     if config.get('active_playlist') == pl_id:
         config['active_playlist'] = None
-        notify_kiosk_reload()
+        restart_mpv()
     try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
@@ -1017,7 +1094,7 @@ def activate_playlist(pl_id):
             json.dump(config, f, indent=2)
     except:
         pass
-    restart_chromium()
+    restart_mpv()
     return jsonify({"success": True, "message": f"Playlist '{pl['name']}' activee"})
 
 
@@ -1131,18 +1208,41 @@ def update_from_github():
 
 
 def start_flask():
-    # use_reloader=False évite le double fork qui casserait le thread Chromium
+    # use_reloader=False évite le double fork qui casserait le thread MPV
     # threaded=True permet les requêtes concurrentes
     app.run(host="0.0.0.0", port=FLASK_PORT, threaded=True, use_reloader=False)
 
 
-def start_chromium(boot_delay=True):
-    """Lance Chromium en mode kiosk sur la page de lecture.
-    boot_delay=True uniquement au premier démarrage (attend que Flask soit prêt)."""
-    global player_process
+def start_mpv(override_cmd=None, boot_delay=True):
+    """Lance MPV avec la config actuelle (ou une commande spécifique si override_cmd).
+    boot_delay=True uniquement au premier démarrage (attend la libération DRM du splash).
+    boot_delay=False pour les redémarrages runtime (restart_mpv, show-ip, etc.)."""
+    global mpv_process
 
-    if boot_delay:
-        # Attendre que Flask soit en écoute (sinon Chromium afficherait une erreur 404)
+    if boot_delay and not override_cmd:
+        # Pré-générer l'écran de bienvenue EN PARALLÈLE du délai DRM (si aucun média).
+        # get_local_ip() peut prendre plusieurs secondes → on ne veut pas cumuler ce
+        # délai avec le time.sleep(4) qui suit.
+        os.makedirs(MEDIA_DIR, exist_ok=True)
+        _welcome_ready = threading.Event()
+        try:
+            _has_media = any(
+                is_media_file(f)
+                for f in os.listdir(MEDIA_DIR)
+                if os.path.isfile(os.path.join(MEDIA_DIR, f))
+            )
+        except Exception:
+            _has_media = False
+        if not _has_media:
+            def _pregen():
+                generate_welcome_screen()
+                _welcome_ready.set()
+            threading.Thread(target=_pregen, daemon=True).start()
+        else:
+            _welcome_ready.set()
+        # Attendre que start_rmg_signage.sh ait quitté Plymouth et créé le ready file.
+        # Le ready file est écrit APRÈS plymouth quit, donc MPV ne démarre
+        # qu'une fois le DRM réellement libéré.
         _ready_files = [
             "/run/rmg_signage/ready",
             os.path.expanduser("~/rmg_signage-ready"),
@@ -1152,102 +1252,139 @@ def start_chromium(boot_delay=True):
             if any(os.path.exists(p) for p in _ready_files):
                 break
             time.sleep(1)
+        else:
+            # Timeout : Plymouth probablement absent, on continue quand même
+            pass
+        # Petit délai supplémentaire pour que Plymouth libère effectivement le DRM
+        time.sleep(0.5)
+        _welcome_ready.wait(timeout=30)  # attend max 30s que le welcome soit prêt
+    elif boot_delay:
         time.sleep(0.5)
 
     os.makedirs(MEDIA_DIR, exist_ok=True)
-
-    url = get_kiosk_url()
-
-    # Profil temporaire pour éviter les avertissements de session précédente
-    profile_dir = "/tmp/rmg_chromium_profile"
-    os.makedirs(profile_dir, exist_ok=True)
-
-    cmd = [
-        CHROMIUM_BINARY,
-        "--kiosk",
-        "--noerrdialogs",
-        "--disable-infobars",
-        "--no-first-run",
-        "--disable-session-crashed-bubble",
-        "--disable-restore-session-state",
-        "--disable-features=TranslateUI",
-        "--check-for-update-interval=31536000",
-        f"--user-data-dir={profile_dir}",
-        url,
-    ]
-
     try:
-        with open(LOG_FILE, "ab") as logf:
-            logf.write(("\n\n--- Starting Chromium kiosk: %s ---\n" % " ".join(cmd)).encode('utf-8'))
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
     except Exception:
         pass
 
-    try:
-        logf = open(LOG_FILE, "ab")
-        proc = subprocess.Popen(cmd, stdout=logf, stderr=logf,
-                                env={**os.environ, "DISPLAY": ":0"})
-        time.sleep(1.5)
-        if proc.poll() is None:
-            player_process = proc
-            try:
-                proc.wait()
-            finally:
-                try:
-                    logf.close()
-                except Exception:
-                    pass
-            # Si player_process a été remplacé par restart_chromium(), ne pas relancer
-            if player_process is not proc:
-                return
-            # Sortie inattendue → relancer
-            player_process = None
-            try:
-                with open(LOG_FILE, "ab") as logf2:
-                    logf2.write(b"Chromium exited unexpectedly, restarting in 2s...\n")
-            except Exception:
-                pass
-            time.sleep(2)
-            threading.Thread(target=start_chromium, kwargs={'boot_delay': False}, daemon=True).start()
-            return
+    cmd = override_cmd or get_mpv_cmd()
+    if cmd is None:
+        print("⚠️ Aucun fichier média trouvé dans", MEDIA_DIR)
+        print("   En attente de fichiers...")
+        while True:
+            time.sleep(5)
+            cmd = get_mpv_cmd()
+            if cmd:
+                break
+
+    extra_list = shlex.split(MPV_EXTRA_ARGS) if MPV_EXTRA_ARGS else []
+    user_has_vo = any(a.startswith("--vo=") for a in extra_list)
+    # --vo=gpu : backend moderne, détecte automatiquement X11 ou Wayland
+    # --vo=drm : framebuffer direct (sans serveur graphique)
+    # --vo=sdl : fallback universel
+    vo_candidates = [[]] if user_has_vo else [["--vo=gpu"], ["--vo=drm"], ["--vo=sdl"]]
+
+    last_exception = None
+    for vo_args in vo_candidates:
+        attempt_cmd = list(cmd)
+        # Ensure --config-dir is passed immediately after the mpv binary
+        config_arg = None
+        rest_args = attempt_cmd[1:]
+        for a in attempt_cmd[1:]:
+            if isinstance(a, str) and a.startswith("--config-dir="):
+                config_arg = a
+                rest_args = [x for x in attempt_cmd[1:] if x != config_arg]
+                break
+        if config_arg:
+            new_cmd = attempt_cmd[:1] + [config_arg] + vo_args + extra_list + rest_args
         else:
-            try:
-                logf.write((f"Chromium exited quickly with code={proc.returncode}\n").encode('utf-8'))
-                logf.close()
-            except Exception:
-                pass
-    except Exception as e:
+            new_cmd = attempt_cmd[:1] + vo_args + extra_list + attempt_cmd[1:]
+
         try:
-            with open(LOG_FILE, "ab") as logf2:
-                logf2.write((f"Exception launching Chromium: {e}\n").encode('utf-8'))
+            with open(LOG_FILE, "ab") as logf:
+                logf.write(("\n\n--- Starting mpv: %s ---\n" % " ".join(new_cmd)).encode('utf-8'))
         except Exception:
             pass
 
-    print("⚠️ Impossible de lancer Chromium — consultez", LOG_FILE)
-    player_process = None
+        try:
+            logf = open(LOG_FILE, "ab")
+            proc = subprocess.Popen(new_cmd, stdout=logf, stderr=logf)
+            time.sleep(1.0)
+            if proc.poll() is None:
+                mpv_process = proc
+                try:
+                    proc.wait()
+                finally:
+                    try:
+                        logf.close()
+                    except Exception:
+                        pass
+                # Si mpv_process a été remplacé par restart_mpv(), ne pas relancer ici
+                if mpv_process is not proc:
+                    return
+                # Sortie inattendue de MPV (pas un arrêt volontaire) → relancer
+                mpv_process = None
+                try:
+                    with open(LOG_FILE, "ab") as logf:
+                        logf.write(b"mpv exited unexpectedly, restarting in 2s...\n")
+                except Exception:
+                    pass
+                time.sleep(2)
+                threading.Thread(target=start_mpv, kwargs={'boot_delay': False}, daemon=True).start()
+                return
+            else:
+                try:
+                    logf.write((f"mpv exited quickly with code={proc.returncode}\n").encode('utf-8'))
+                    logf.close()
+                except Exception:
+                    pass
+                last_exception = RuntimeError(f"mpv exited with code {proc.returncode}")
+                continue
+        except Exception as e:
+            last_exception = e
+            try:
+                with open(LOG_FILE, "ab") as logf:
+                    logf.write((f"Exception launching mpv: {e}\n").encode('utf-8'))
+            except Exception:
+                pass
+            continue
+
+    print("⚠️ Impossible de lancer MPV — consultez", LOG_FILE)
+    if last_exception:
+        try:
+            with open(LOG_FILE, "ab") as logf:
+                logf.write((f"Final error: {last_exception}\n").encode('utf-8'))
+        except Exception:
+            pass
+    mpv_process = None
 
 
-def restart_chromium():
-    """Arrête Chromium et le relance. Notifie aussi la page kiosk via le compteur de génération."""
-    global player_process
-    notify_kiosk_reload()
-    _player_lock.acquire()
+def restart_mpv(override_cmd=None):
+    """Redémarre MPV. Attend le verrou si un restart est en cours."""
+    global mpv_process
+    _mpv_lock.acquire()
     try:
-        proc = player_process
-        player_process = None
+        try:
+            with open('/dev/tty1', 'wb') as _tty:
+                _tty.write(b'\033[?25l\033[40m\033[2J\033[H')
+        except Exception:
+            pass
+        proc = mpv_process
+        mpv_process = None
         if proc:
             try:
                 proc.terminate()
                 proc.wait(timeout=3)
             except Exception:
                 pass
+            # Force kill si toujours vivant
             try:
                 proc.kill()
             except Exception:
                 pass
     finally:
-        _player_lock.release()
-    threading.Thread(target=start_chromium, kwargs={'boot_delay': False}, daemon=True).start()
-
+        _mpv_lock.release()
+    threading.Thread(target=start_mpv, args=(override_cmd,), kwargs={'boot_delay': False}, daemon=True).start()
 
 
 if __name__ == "__main__":
@@ -1263,11 +1400,11 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"⚠️ Impossible de créer config.json : {e}")
 
-    # Chromium tourne en thread daemon : quand restart_chromium() le tue, proc.wait() retourne
+    # MPV tourne en thread daemon : quand restart_mpv() le tue, proc.wait() retourne
     # et le thread s'arrête proprement sans emporter toute l'application.
-    chromium_thread = threading.Thread(target=start_chromium, daemon=True)
-    chromium_thread.start()
+    mpv_thread = threading.Thread(target=start_mpv, daemon=True)
+    mpv_thread.start()
 
     # Flask bloque le thread principal (non-daemon) → le processus reste en vie
-    # même après un redémarrage Chromium.
+    # même après un redémarrage mpv.
     start_flask()
