@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>RMG Signage — Player</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* Conteneur principal — rotation appliquée ici */
+    #stage {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+    }
+
+    /* Zone positionnée en % */
+    .zone {
+      position: absolute;
+      overflow: hidden;
+    }
+
+    /* ── Zone Médias ──────────────────────────────── */
+    .zone-media {
+      background: #000;
+    }
+    .zone-media img,
+    .zone-media video {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    .zone-media img.active,
+    .zone-media video.active {
+      opacity: 1;
+    }
+
+    /* ── Zone Widgets ─────────────────────────────── */
+    .zone-widgets {
+      background: #0a0f1a;
+      display: flex;
+      gap: 0;
+    }
+    .zone-widgets.dir-column  { flex-direction: column; align-items: stretch; }
+    .zone-widgets.dir-row     { flex-direction: row;    align-items: center; }
+
+    /* Widget card individuel */
+    .widget {
+      padding: 18px 20px;
+      flex-shrink: 0;
+    }
+    .dir-column .widget { width: 100%; }
+    .dir-row    .widget { flex: 1; text-align: center; }
+
+    /* Séparateurs */
+    .dir-column .widget + .widget { border-top: 1px solid rgba(255,255,255,0.07); }
+    .dir-row    .widget + .widget { border-left: 1px solid rgba(255,255,255,0.07); }
+
+    /* ── Widget : Horloge ─────────────────────────── */
+    .w-clock .time {
+      font-size: clamp(2.5rem, 5vw, 5rem);
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    .w-clock .date {
+      font-size: clamp(0.85rem, 1.2vw, 1.2rem);
+      color: rgba(255,255,255,0.55);
+      margin-top: 6px;
+      text-transform: capitalize;
+    }
+
+    /* ── Widget : Météo ──────────────────────────── */
+    .w-weather .wicon  { font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1; }
+    .w-weather .wtemp  {
+      font-size: clamp(2rem, 3.5vw, 3rem);
+      font-weight: 700;
+      color: #ffffff;
+      margin-top: 4px;
+    }
+    .w-weather .wdesc  {
+      font-size: clamp(0.75rem, 1.1vw, 1rem);
+      color: rgba(255,255,255,0.55);
+      margin-top: 4px;
+    }
+    .w-weather .wcity  {
+      font-size: clamp(0.7rem, 1vw, 0.9rem);
+      color: rgba(255,255,255,0.35);
+      margin-top: 2px;
+    }
+    .w-weather.loading .wtemp { color: rgba(255,255,255,0.3); }
+
+    /* ── Widget : Ticker RSS ──────────────────────── */
+    .w-news {
+      overflow: hidden;
+      position: relative;
+    }
+    .w-news .news-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .dir-row .w-news .news-label { display: none; }
+
+    .news-ticker-wrap {
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .news-ticker-inner {
+      display: inline-block;
+      white-space: nowrap;
+      animation: tickerScroll 40s linear infinite;
+    }
+    .dir-column .news-ticker-inner {
+      animation: none;
+      white-space: normal;
+    }
+    @keyframes tickerScroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .news-item {
+      font-size: clamp(0.75rem, 1.1vw, 1rem);
+      color: rgba(255,255,255,0.75);
+      padding-right: 60px;
+    }
+    .dir-row .news-item { display: inline; }
+    .dir-row .news-item::after { content: " — "; color: rgba(255,255,255,0.25); }
+    .dir-column .news-item {
+      display: block;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      white-space: normal;
+      line-height: 1.35;
+    }
+    .dir-column .news-item:last-child { border-bottom: none; }
+
+    /* ── Widget : Message ─────────────────────────── */
+    .w-message .msg-text {
+      color: #ffffff;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+
+    /* ── Overlay Bienvenue ────────────────────────── */
+    #welcome-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    #welcome-overlay.visible { opacity: 1; pointer-events: auto; }
+    #welcome-overlay .w-title {
+      font-size: clamp(2rem, 5vw, 4rem);
+      font-weight: 700;
+      color: #fff;
+    }
+    #welcome-overlay .w-sub {
+      font-size: clamp(1rem, 2vw, 1.5rem);
+      color: rgba(255,255,255,0.5);
+    }
+    #welcome-overlay .w-url {
+      font-size: clamp(1.2rem, 2.5vw, 2rem);
+      font-weight: 700;
+      color: #4a9eff;
+      margin-top: 8px;
+    }
+    #welcome-overlay canvas {
+      margin-top: 16px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<div id="welcome-overlay">
+  <div class="w-title">RMG Signage</div>
+  <div class="w-sub">Connectez-vous pour ajouter des médias</div>
+  <div class="w-url" id="w-url-text">—</div>
+  <canvas id="w-qr" width="200" height="200"></canvas>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  RMG Signage — Player
+// ═══════════════════════════════════════════════════════
+
+const POLL_INTERVAL    = 5000;   // état du player
+const WEATHER_INTERVAL = 600000; // météo (10 min)
+const NEWS_INTERVAL    = 300000; // RSS  (5 min)
+
+let _state        = null;   // dernier état reçu
+let _weatherData  = null;
+let _newsItems    = [];
+let _mediaTimers  = [];
+let _clockTimer   = null;
+let _weatherTimer = null;
+let _newsTimer    = null;
+let _prevTemplateId = null;
+let _prevNextReq    = 0;
+let _mediaIndex     = 0;
+let _mediaCurrent   = null;  // élément actif (img ou video)
+
+// ── Polling principal ───────────────────────────────────
+async function pollState() {
+  try {
+    const r = await fetch('/api/player-state');
+    if (!r.ok) return;
+    const s = await r.json();
+
+    const cfg = s.config;
+
+    // Bienvenue overlay
+    const ov = document.getElementById('welcome-overlay');
+    if (cfg.show_welcome) {
+      showWelcome(s);
+      ov.classList.add('visible');
+    } else {
+      ov.classList.remove('visible');
+    }
+
+    // Rebuild si template changé
+    if (!_state || s.active_template.id !== _prevTemplateId) {
+      _prevTemplateId = s.active_template.id;
+      buildStage(s);
+    }
+
+    // Réactualiser les médias si liste a changé
+    const filesChanged = !_state ||
+      JSON.stringify(s.media_files) !== JSON.stringify(_state.media_files) ||
+      JSON.stringify(cfg) !== JSON.stringify(_state.config);
+
+    if (filesChanged) {
+      _mediaIndex = 0;
+      restartMediaZones(s);
+    }
+
+    // Next demandé depuis l'interface
+    if (_state && cfg.next_requested !== _prevNextReq) {
+      _prevNextReq = cfg.next_requested;
+      advanceMedia(s);
+    }
+
+    _state = s;
+
+    // Rotation
+    const rot = cfg.rotation || 0;
+    document.getElementById('stage').style.transform =
+      rot ? `rotate(${rot}deg)` : '';
+
+  } catch(e) { /* silencieux */ }
+}
+
+// ── Construire les zones depuis le template ─────────────
+function buildStage(s) {
+  clearAllTimers();
+  const stage    = document.getElementById('stage');
+  stage.innerHTML = '';
+
+  const zones = s.active_template.zones || [];
+  zones.forEach(zone => {
+    const el = document.createElement('div');
+    el.className = 'zone';
+    el.id        = `zone-${zone.id}`;
+    el.style.left   = (zone.x_pct * 100) + '%';
+    el.style.top    = (zone.y_pct * 100) + '%';
+    el.style.width  = (zone.w_pct * 100) + '%';
+    el.style.height = (zone.h_pct * 100) + '%';
+
+    if (zone.type === 'media') {
+      el.classList.add('zone-media');
+      stage.appendChild(el);
+      startMediaZone(el, s);
+
+    } else if (zone.type === 'widgets') {
+      el.classList.add('zone-widgets');
+      const dir = zone.config?.direction || 'column';
+      el.classList.add(`dir-${dir}`);
+      stage.appendChild(el);
+      buildWidgets(el, zone, s, dir);
+    }
+  });
+}
+
+// ── Zone Médias ─────────────────────────────────────────
+function getMediaList(s) {
+  const cfg = s.config;
+  if (cfg.single_file_mode && cfg.selected_file) {
+    return [cfg.selected_file];
+  }
+  return s.media_files || [];
+}
+
+function startMediaZone(container, s) {
+  const files = getMediaList(s);
+  if (!files.length) return;
+  _mediaIndex = 0;
+  showMedia(container, s, _mediaIndex);
+}
+
+function restartMediaZones(s) {
+  clearMediaTimers();
+  const container = document.querySelector('.zone-media');
+  if (!container) return;
+  _mediaIndex = 0;
+  showMedia(container, s, _mediaIndex);
+}
+
+function showMedia(container, s, idx) {
+  const files = getMediaList(s);
+  if (!files.length) return;
+
+  const cfg      = s.config;
+  const filename = files[idx % files.length];
+  const isVideo  = /\.(mp4|avi|mkv|mov|webm|m4v)$/i.test(filename);
+  const url      = '/media/' + encodeURIComponent(filename);
+
+  // Créer le nouvel élément
+  let next;
+  if (isVideo) {
+    next = document.createElement('video');
+    next.src      = url;
+    next.autoplay = true;
+    next.muted    = true;
+    next.playsInline = true;
+  } else {
+    next = document.createElement('img');
+    next.src = url;
+    next.alt = '';
+  }
+
+  container.appendChild(next);
+
+  // Transition après chargement
+  const activate = () => {
+    // Supprimer l'ancien
+    if (_mediaCurrent) {
+      const old = _mediaCurrent;
+      old.classList.remove('active');
+      setTimeout(() => { if (old.parentNode) old.parentNode.removeChild(old); }, 700);
+    }
+    next.classList.add('active');
+    _mediaCurrent = next;
+
+    // Planifier le suivant
+    let dur;
+    if (isVideo) {
+      // Vidéo : avancer à la fin
+      next.addEventListener('ended', () => {
+        _mediaIndex = (idx + 1) % files.length;
+        showMedia(container, s, _mediaIndex);
+      }, {once: true});
+      return;
+    }
+    dur = (cfg.file_durations[filename] || cfg.image_duration) * 1000;
+    const t = setTimeout(() => {
+      _mediaIndex = (idx + 1) % files.length;
+      showMedia(container, s, _mediaIndex);
+    }, dur);
+    _mediaTimers.push(t);
+  };
+
+  if (isVideo) {
+    next.addEventListener('canplay', activate, {once: true});
+    next.load();
+  } else {
+    if (next.complete) {
+      activate();
+    } else {
+      next.addEventListener('load', activate, {once: true});
+      next.addEventListener('error', activate, {once: true});
+    }
+  }
+}
+
+function advanceMedia(s) {
+  clearMediaTimers();
+  const container = document.querySelector('.zone-media');
+  if (!container) return;
+  const files = getMediaList(s);
+  _mediaIndex = ((_mediaIndex || 0) + 1) % (files.length || 1);
+  showMedia(container, s, _mediaIndex);
+}
+
+// ── Zone Widgets ────────────────────────────────────────
+function buildWidgets(container, zone, s, dir) {
+  const widgets = (zone.widgets || []).slice().sort((a, b) => (a.order||0) - (b.order||0));
+  widgets.forEach(w => {
+    const el = document.createElement('div');
+    el.className   = 'widget';
+    el.id          = `widget-${w.id}`;
+    container.appendChild(el);
+    renderWidget(el, w, s, dir);
+  });
+}
+
+function renderWidget(el, w, s, dir) {
+  switch (w.type) {
+    case 'clock':          renderClock(el, w.config, dir);           break;
+    case 'weather':        renderWeather(el, w.config, s, dir);      break;
+    case 'news_ticker':    renderNews(el, w.config, dir);             break;
+    case 'custom_message': renderMessage(el, w.config, dir);         break;
+  }
+}
+
+// ── Horloge ─────────────────────────────────────────────
+function renderClock(el, cfg, dir) {
+  el.classList.add('w-clock');
+  el.innerHTML = `<div class="time"></div>${cfg.show_date ? '<div class="date"></div>' : ''}`;
+  const tick = () => {
+    const now  = new Date();
+    const hh   = cfg.format_24h
+      ? now.getHours().toString().padStart(2,'0')
+      : ((now.getHours() % 12) || 12).toString().padStart(2,'0');
+    const mm   = now.getMinutes().toString().padStart(2,'0');
+    const ss   = now.getSeconds().toString().padStart(2,'0');
+    el.querySelector('.time').textContent = `${hh}:${mm}:${ss}`;
+    if (cfg.show_date) {
+      el.querySelector('.date').textContent = now.toLocaleDateString('fr-FR', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+    }
+  };
+  tick();
+  const t = setInterval(tick, 1000);
+  _clockTimer = t;
+}
+
+// ── Météo ───────────────────────────────────────────────
+function renderWeather(el, cfg, s, dir) {
+  el.classList.add('w-weather');
+  const city = s.weather_city || '—';
+  el.innerHTML = `
+    <div class="wicon">🌡️</div>
+    <div class="wtemp">—°</div>
+    <div class="wdesc">Chargement…</div>
+    <div class="wcity">${city}</div>`;
+
+  const update = () => {
+    if (_weatherData) {
+      el.querySelector('.wicon').textContent   = _weatherData.icon || '🌡️';
+      el.querySelector('.wtemp').textContent   = `${_weatherData.temp_c}°${cfg.unit||'C'}`;
+      el.querySelector('.wdesc').textContent   = _weatherData.description || '';
+      el.querySelector('.wcity').textContent   = _weatherData.city || city;
+      el.classList.remove('loading');
+    }
+  };
+
+  // Charger immédiatement si pas de cache
+  if (!_weatherData) {
+    fetchWeather().then(update);
+  } else {
+    update();
+  }
+  // Refresh périodique
+  const t = setInterval(async () => {
+    await fetchWeather();
+    update();
+  }, WEATHER_INTERVAL);
+  _weatherTimer = t;
+}
+
+async function fetchWeather() {
+  try {
+    const r = await fetch('/api/weather');
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success) _weatherData = d;
+    }
+  } catch(e) {}
+}
+
+// ── Ticker RSS ──────────────────────────────────────────
+function renderNews(el, cfg, dir) {
+  el.classList.add('w-news');
+
+  const wrap  = document.createElement('div');
+  wrap.className = 'news-ticker-wrap';
+  const inner = document.createElement('div');
+  inner.className = 'news-ticker-inner';
+  inner.id = `news-inner-${Date.now()}`;
+
+  if (dir === 'column') {
+    el.innerHTML = '<div class="news-label">ACTUALITÉS</div>';
+    el.appendChild(wrap);
+  } else {
+    el.appendChild(wrap);
+  }
+  wrap.appendChild(inner);
+
+  const populate = () => {
+    if (!_newsItems.length) {
+      inner.innerHTML = '<span class="news-item">Chargement des actualités…</span>';
+      return;
+    }
+    const count = Math.min(cfg.item_count || 10, _newsItems.length);
+    const items = _newsItems.slice(0, count);
+    if (dir === 'row') {
+      // Ticker horizontal : doubler pour boucle infinie
+      const html = items.map(i =>
+        `<span class="news-item">${escHtml(i.title)}</span>`).join('');
+      inner.innerHTML = html + html;
+    } else {
+      inner.innerHTML = items.map(i =>
+        `<div class="news-item">${escHtml(i.title)}</div>`).join('');
+    }
+  };
+
+  if (!_newsItems.length) {
+    fetchNews().then(populate);
+  } else {
+    populate();
+  }
+
+  const t = setInterval(async () => {
+    await fetchNews();
+    populate();
+  }, NEWS_INTERVAL);
+  _newsTimer = t;
+}
+
+async function fetchNews() {
+  try {
+    const r = await fetch('/api/news');
+    if (r.ok) {
+      const d = await r.json();
+      if (d.success && d.items) _newsItems = d.items;
+    }
+  } catch(e) {}
+}
+
+// ── Message personnalisé ─────────────────────────────────
+function renderMessage(el, cfg, dir) {
+  el.classList.add('w-message');
+  if (!cfg.text) return;
+  const span = document.createElement('div');
+  span.className   = 'msg-text';
+  span.textContent = cfg.text;
+  span.style.fontSize = (cfg.font_size || 24) + 'px';
+  span.style.color    = cfg.text_color || '#ffffff';
+  el.appendChild(span);
+}
+
+// ── Overlay Bienvenue ────────────────────────────────────
+function showWelcome(s) {
+  const ip  = location.hostname;
+  const url = `http://${ip}:${s.flask_port || 5000}`;
+  document.getElementById('w-url-text').textContent = url;
+  // QR code minimaliste (URL module)
+  drawQR(document.getElementById('w-qr'), url);
+}
+
+// QR code basique via l'API QR publique (localhost = pas de réseau, fallback texte)
+function drawQR(canvas, url) {
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#000';
+  ctx.font = '12px monospace';
+  ctx.fillText(url, 8, canvas.height / 2);
+}
+
+// ── Utilitaires ──────────────────────────────────────────
+function clearMediaTimers() {
+  _mediaTimers.forEach(t => clearTimeout(t));
+  _mediaTimers = [];
+  _mediaCurrent = null;
+}
+
+function clearAllTimers() {
+  clearMediaTimers();
+  if (_clockTimer)   { clearInterval(_clockTimer);   _clockTimer   = null; }
+  if (_weatherTimer) { clearInterval(_weatherTimer); _weatherTimer = null; }
+  if (_newsTimer)    { clearInterval(_newsTimer);     _newsTimer    = null; }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Démarrage ────────────────────────────────────────────
+(async function init() {
+  await pollState();
+  setInterval(pollState, POLL_INTERVAL);
+})();
+</script>
+</body>
+</html>

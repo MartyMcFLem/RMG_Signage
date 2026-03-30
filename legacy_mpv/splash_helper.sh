@@ -1,15 +1,15 @@
 #!/bin/bash
-# Helper pour afficher/effacer le splash RMG sur tty1 via fbi (framebuffer)
+# Helper pour afficher/effacer le splash RMG sur tty1 via mpv (DRM/KMS)
 # Utilise par le service systemd en ExecStartPre / ExecStopPost.
 #
-# NOTE : On utilise fbi (framebuffer image viewer) maintenant que mpv est
-# remplace par Chromium. fbi ecrit directement sur /dev/fb0 sans conflit
-# avec Chromium qui utilise le pipeline DRM/KMS via --ozone-platform=drm.
+# NOTE : On utilise mpv (deja requis par l'appli) plutot que fbi.
+# fbi utilise l'interface legacy /dev/fb0 qui entre en conflit avec le
+# --vo=drm de mpv principal (meme pipeline DRM/KMS sous vc4-kms-v3d).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPLASH_IMG="$SCRIPT_DIR/static/splash.png"
 PIDFILE="/run/rmg_signage/splash.pid"
-FBI_BIN="$(command -v fbi 2>/dev/null || echo /usr/bin/fbi)"
+MPV_BIN="$(command -v mpv 2>/dev/null || echo /usr/bin/mpv)"
 
 # Emplacements possibles du fichier "ready" (coherent avec start_rmg_signage.sh)
 READY_FILES=(
@@ -74,24 +74,28 @@ case "$1" in
     # si un fichier ready d'une session precedente traine)
     _cleanup_ready_files
 
-    if [ -x "$FBI_BIN" ] && [ -f "$SPLASH_IMG" ]; then
+    if [ -x "$MPV_BIN" ] && [ -f "$SPLASH_IMG" ]; then
       # S'assurer que /run/rmg_signage existe (cree par RuntimeDirectory= systemd
       # mais on cree en fallback au cas ou)
       mkdir -p /run/rmg_signage 2>/dev/null || true
 
-      # Preparer tty1 : curseur masque + fond noir
+      # Preparer tty1 : curseur masque + fond noir avant que mpv prenne le DRM
       _blackout_tty
 
-      # Lancer fbi pour afficher le splash sur le framebuffer.
-      # -noverbose : silencieux
-      # -a         : auto-zoom
-      # -T 1       : utiliser tty1
-      # -t 86400   : duree max 24h (on le tue manuellement via PIDFILE)
-      nohup "$FBI_BIN" \
-        -noverbose \
-        -a \
-        -T 1 \
-        -t 86400 \
+      # Lancer mpv en mode DRM pour afficher le splash.
+      # --vo=drm     : meme backend que le mpv principal -> pas de conflit
+      # --no-terminal / --really-quiet : silencieux
+      # --image-display-duration=inf   : tient jusqu'au signal ready
+      # --loop-file=inf                : boucle (au cas ou mpv finirait)
+      nohup "$MPV_BIN" \
+        --fs \
+        --no-terminal \
+        --no-osc \
+        --no-input-default-bindings \
+        --vo=drm \
+        --really-quiet \
+        --image-display-duration=inf \
+        --loop-file=inf \
         "$SPLASH_IMG" >/dev/null 2>&1 &
       SPLASH_PID=$!
       echo "$SPLASH_PID" > "$PIDFILE"
@@ -116,7 +120,7 @@ case "$1" in
         fi
       ) >/dev/null 2>&1 &
     else
-      # Pas de fbi ou pas de splash.png : blackout tty1 quand meme
+      # Pas de mpv ou pas de splash.png : blackout tty1 quand meme
       _blackout_tty
     fi
     ;;

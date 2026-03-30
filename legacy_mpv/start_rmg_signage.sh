@@ -11,12 +11,18 @@ log() {
 
 log "=== Demarrage du service rmg_signage ==="
 
+# Mode headless (Pi OS Lite sans X11) : on s'assure que DISPLAY n'est pas defini
+# afin que MPV choisisse un backend DRM/framebuffer.
+unset DISPLAY 2>/dev/null || true
 log "USER=$USER | HOME=$HOME | PORT=$FLASK_PORT"
 
 # Dossier des medias (cree ici en dernier recours, normalement fait par le service ExecStartPre)
 MEDIA_DIR="${RMG_SIGNAGE_MEDIA_DIR:-/home/rmg/signage/medias}"
 mkdir -p "$MEDIA_DIR"
 log "Dossier media : $MEDIA_DIR"
+
+# Nettoyage du socket MPV
+rm -f /tmp/mpv-socket 2>/dev/null || true
 
 # Repertoire et script Python
 SCRIPT_DIR="${RMG_SIGNAGE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
