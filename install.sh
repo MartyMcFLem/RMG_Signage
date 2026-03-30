@@ -66,8 +66,10 @@ echo ""
 # ─── 1. Paquets système
 echo "[1/8] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git chromium-browser fbida python3-venv python3-pip fonts-dejavu-core \
+apt-get install -y git chromium python3-venv python3-pip fonts-dejavu-core \
   xserver-xorg x11-xserver-utils xinit openbox
+# fbida (outil fbi pour le splash framebuffer) -- optionnel, non critique
+apt-get install -y fbida 2>/dev/null || true
 
 # ─── 2. Utilisateur et groupes
 echo "[2/8] Configuration de l'utilisateur '$SERVICE_USER'..."

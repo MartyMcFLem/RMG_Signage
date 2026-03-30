@@ -45,7 +45,7 @@ sudo bash install.sh --dev     # développement  (via bootstrap-dev.sh ou flag)
 ```
 
 Ce script `install.sh` fait tout automatiquement :
-- Installe les paquets système (`mpv`, `python3-venv`, `git`)
+- Installe les paquets système (`chromium`, `python3-venv`, `git`)
 - Génère le **numéro de série** de l'appareil et configure le hostname (`rmg-sign-XXXXXXXXX`)
 - Crée les dossiers nécessaires
 - Met en place le virtualenv Python et installe les dépendances
@@ -126,7 +126,7 @@ Pour le splash personnalisé, déposez votre image dans `static/splash.png`
 | Image disque | `/var/lib/rmg_signage/media.img` |
 | Licence | `/etc/rmg_signage/license.json` |
 | Log service | `sudo journalctl -u rmg_signage -f` |
-| Log MPV | `/home/rmg/signage/medias/rmg_signage-mpv.log` |
+| Log lecteur | `/home/rmg/signage/medias/rmg_signage.log` |
 | Service systemd | `/etc/systemd/system/rmg_signage.service` |
 | Interface web | `http://rmg-sign-XXXXXXXXX.local:5000` |
 
@@ -230,9 +230,9 @@ python3 generate_keys.py --list-tiers
 sudo journalctl -u rmg_signage -n 50
 ```
 
-**MPV ne lit pas les médias**
+**Chromium ne lit pas les médias**
 ```bash
-cat /home/rmg/signage/medias/rmg_signage-mpv.log
+cat /home/rmg/signage/medias/rmg_signage.log
 ```
 
 **Réinstaller proprement**
