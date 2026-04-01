@@ -871,12 +871,14 @@ function renderCanvas() {
     const el = document.createElement('div');
     el.className = 'pb-widget';
     el.dataset.wid = w.id;
+    const br = w.border_radius || 0;
     el.style.cssText = [
       'position:absolute;overflow:visible;',
       `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`,
       `background:${color}22;`,
       `border:2px ${selected ? 'solid' : 'dashed'} ${color};`,
-      'border-radius:4px;display:flex;align-items:center;justify-content:center;',
+      `border-radius:${Math.max(4, br)}px;`,
+      'display:flex;align-items:center;justify-content:center;',
       'font-size:11px;text-align:center;cursor:move;box-sizing:border-box;',
       `color:${color};`,
       selected ? `box-shadow:0 0 0 2px ${color}66;z-index:100;` : 'z-index:1;',
@@ -980,6 +982,10 @@ function renderWidgetProps() {
     <div class="prop-row"><label>Y %</label><input type="number" id="pb-prop-y" value="${Math.round(w.y)}" min="0" max="99" onchange="_pbSet('y',+this.value)"></div>
     <div class="prop-row"><label>Larg %</label><input type="number" id="pb-prop-w" value="${Math.round(w.w)}" min="1" max="100" onchange="_pbSet('w',+this.value)"></div>
     <div class="prop-row"><label>Haut %</label><input type="number" id="pb-prop-h" value="${Math.round(w.h)}" min="1" max="100" onchange="_pbSet('h',+this.value)"></div>
+    <hr style="border-color:var(--border);margin:8px 0">
+    <div class="prop-row"><label>Bordure px</label><input type="number" value="${w.border_width||0}" min="0" max="30" onchange="_pbSet('border_width',+this.value)"></div>
+    <div class="prop-row"><label>Couleur bord.</label><input type="color" value="${w.border_color||'#ffffff'}" onchange="_pbSet('border_color',this.value)"></div>
+    <div class="prop-row"><label>Arrondi px</label><input type="number" value="${w.border_radius||0}" min="0" max="200" onchange="_pbSet('border_radius',+this.value)"></div>
     <hr style="border-color:var(--border);margin:8px 0">` : '';
 
   let typeFields = '';

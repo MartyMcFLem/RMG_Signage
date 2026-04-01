@@ -59,35 +59,38 @@
       align-items: center;
       justify-content: center;
       width: 100%; height: 100%;
-      gap: 1.5cqh;
+      padding: 3cqh 3cqw;
+      gap: 2cqh;
+      box-sizing: border-box;
     }
-    .weather-city   { opacity: .8; white-space: nowrap; font-size: 5.5cqh; }
-    .weather-icon   { line-height: 1; font-size: 18cqh; }
-    .weather-temp   { font-weight: bold; line-height: 1; font-size: 20cqh; }
-    .weather-desc   { opacity: .8; white-space: nowrap; text-align: center; font-size: 5cqh; }
-    .weather-detail { opacity: .6; font-size: 4cqh; }
+    .weather-city   { opacity: .8; white-space: nowrap; font-size: 8cqh; }
+    .weather-icon   { line-height: 1; font-size: 30cqh; }
+    .weather-temp   { font-weight: bold; line-height: 1; font-size: 28cqh; }
+    .weather-desc   { opacity: .8; white-space: nowrap; text-align: center; font-size: 7cqh; }
+    .weather-detail { opacity: .6; font-size: 6cqh; }
 
     /* Layout horizontal : largeur > ~1.5× la hauteur */
     @container (min-aspect-ratio: 3/2) {
       .weather-inner {
         flex-direction: row;
         justify-content: center;
-        gap: 4cqw;
+        gap: 5cqw;
+        padding: 4cqh 6cqw;
       }
       .weather-icon {
-        font-size: 22cqh;
+        font-size: 45cqh;
         flex-shrink: 0;
       }
       .weather-info {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        gap: 0.8cqh;
+        gap: 1cqh;
       }
-      .weather-city  { font-size: 6cqh; }
-      .weather-temp  { font-size: 18cqh; }
-      .weather-desc  { font-size: 5.5cqh; text-align: left; white-space: normal; }
-      .weather-detail{ font-size: 4.5cqh; }
+      .weather-city  { font-size: 10cqh; }
+      .weather-temp  { font-size: 30cqh; }
+      .weather-desc  { font-size: 9cqh; text-align: left; white-space: normal; }
+      .weather-detail{ font-size: 7cqh; }
     }
     /* Media */
     .widget-media {
@@ -207,7 +210,12 @@ function makeWidget(w) {
   const el = document.createElement('div');
   el.id = 'w-' + w.id;
   el.className = 'widget widget-' + w.type;
-  el.style.cssText = `left:${w.x||0}%;top:${w.y||0}%;width:${w.w||50}%;height:${w.h||30}%;`;
+  const bw = w.border_width || 0;
+  const bc = w.border_color || '#ffffff';
+  const br = w.border_radius || 0;
+  el.style.cssText = `left:${w.x||0}%;top:${w.y||0}%;width:${w.w||50}%;height:${w.h||30}%;`
+    + (bw ? `border:${bw}px solid ${bc};` : '')
+    + (br ? `border-radius:${br}px;` : '');
   return el;
 }
 
