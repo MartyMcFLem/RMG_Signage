@@ -20,6 +20,7 @@
     .widget {
       position: absolute;
       overflow: hidden;
+      container-type: size;
     }
     /* Clock */
     .widget-clock {
@@ -124,6 +125,9 @@ function formatTimeFR(d) {
 function formatDateFR(d) {
   return DAYS_FR[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS_FR[d.getMonth()] + ' ' + d.getFullYear();
 }
+function formatDateShort(d) {
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+}
 
 /* ── DOM builders ─────────────────────────────────── */
 function makeWidget(w) {
@@ -140,11 +144,12 @@ function buildClock(w) {
   const showSec = !!cfg.show_seconds;
   const showDate = !!cfg.show_date;
   const color = cfg.color || '#ffffff';
-  const sz = cfg.font_size || 80;
-  const dateSz = cfg.date_font_size || Math.max(20, Math.round(sz * 0.32));
+  const sz = cfg.font_size || 6;
+  const dateSz = cfg.date_font_size || Math.max(1, Math.round(sz * 0.32));
+  el.dataset.dateFormat = cfg.date_format || 'full';
   el.innerHTML = `
-    <div class="clock-time" style="font-size:${sz}px;color:${color}" data-show-sec="${showSec}">--:--</div>
-    ${showDate ? `<div class="clock-date" style="font-size:${dateSz}px;color:${cfg.date_color||color}"></div>` : ''}`;
+    <div class="clock-time" style="font-size:${sz}cqw;color:${color}" data-show-sec="${showSec}">--:--</div>
+    ${showDate ? `<div class="clock-date" style="font-size:${dateSz}cqw;color:${cfg.date_color||color}"></div>` : ''}`;
   return el;
 }
 
@@ -154,7 +159,7 @@ function buildText(w) {
   const align = cfg.align || 'center';
   el.style.justifyContent = align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center';
   el.style.textAlign = align;
-  el.style.fontSize  = (cfg.font_size || 48) + 'px';
+  el.style.fontSize  = (cfg.font_size || 3) + 'cqw';
   el.style.color     = cfg.color || '#ffffff';
   if (cfg.bold) el.style.fontWeight = 'bold';
   if (cfg.italic) el.style.fontStyle = 'italic';
@@ -166,20 +171,20 @@ function buildWeather(w) {
   const cfg = w.config || {};
   const el = makeWidget(w);
   const color = cfg.color || '#ffffff';
-  const citySz = cfg.city_font_size || 22;
-  const tempSz = cfg.temp_font_size || 72;
-  const descSz = cfg.desc_font_size || 22;
-  const iconSz = cfg.icon_font_size || 64;
+  const citySz = cfg.city_font_size || 3;
+  const tempSz = cfg.temp_font_size || 8;
+  const descSz = cfg.desc_font_size || 3;
+  const iconSz = cfg.icon_font_size || 7;
   el.style.color = color;
   el.dataset.lat  = cfg.lat  || 48.85;
   el.dataset.lon  = cfg.lon  || 2.35;
   el.dataset.unit = cfg.unit || 'celsius';
   el.dataset.city = cfg.city || '';
   el.innerHTML = `
-    ${cfg.city ? `<div class="weather-city" style="font-size:${citySz}px">${cfg.city}</div>` : ''}
-    <div class="weather-icon" style="font-size:${iconSz}px">…</div>
-    <div class="weather-temp" style="font-size:${tempSz}px">--°</div>
-    <div class="weather-desc" style="font-size:${descSz}px"></div>
+    ${cfg.city ? `<div class="weather-city" style="font-size:${citySz}cqw">${cfg.city}</div>` : ''}
+    <div class="weather-icon" style="font-size:${iconSz}cqw">…</div>
+    <div class="weather-temp" style="font-size:${tempSz}cqw">--°</div>
+    <div class="weather-desc" style="font-size:${descSz}cqw"></div>
     <div class="weather-detail"></div>`;
   return el;
 }
@@ -203,7 +208,7 @@ function buildTicker(w) {
   const color = cfg.color || '#ffffff';
   const sz = cfg.font_size || 28;
   const bg = cfg.bg_color || 'rgba(0,0,0,0.5)';
-  el.style.cssText += `background:${bg};font-size:${sz}px;color:${color};padding:0 20px;`;
+  el.style.cssText += `background:${bg};font-size:${sz}cqmin;color:${color};padding:0 20px;`;
   el.innerHTML = `<div class="ticker-inner" id="ticker-${w.id}">Chargement...</div>`;
   el.dataset.url = cfg.rss_url || '';
   el.dataset.speed = cfg.speed || 60;
@@ -284,7 +289,8 @@ function initPage(page) {
 function updateAllClocks() {
   const now = new Date();
   const {h, m, s} = formatTimeFR(now);
-  const dateStr = formatDateFR(now);
+  const dateFull  = formatDateFR(now);
+  const dateShort = formatDateShort(now);
   document.querySelectorAll('.widget-clock').forEach(el => {
     const timeEl = el.querySelector('.clock-time');
     const dateEl = el.querySelector('.clock-date');
@@ -292,7 +298,7 @@ function updateAllClocks() {
       const showSec = timeEl.dataset.showSec === 'true';
       timeEl.textContent = showSec ? `${h}:${m}:${s}` : `${h}:${m}`;
     }
-    if (dateEl) dateEl.textContent = dateStr;
+    if (dateEl) dateEl.textContent = el.dataset.dateFormat === 'short' ? dateShort : dateFull;
   });
 }
 

@@ -785,11 +785,11 @@ async function savePageBuilder() {
 /* ── Widget management ───────────────────────────── */
 const _widgetDefaults = {
   background: {x:0,y:0,w:100,h:100, config:{color:'#1a1a2e'}},
-  clock:      {x:10,y:5,w:80,h:30, config:{font_size:90,color:'#ffffff',show_seconds:false,show_date:true,date_font_size:28,date_color:'#aaaacc'}},
-  text:       {x:10,y:40,w:80,h:20, config:{text:'Votre texte ici',font_size:48,color:'#ffffff',align:'center',bold:false,italic:false}},
-  weather:    {x:5,y:55,w:45,h:40, config:{lat:48.85,lon:2.35,city:'Paris',unit:'celsius',temp_font_size:72,icon_font_size:60,desc_font_size:22,city_font_size:22,color:'#ffffff'}},
+  clock:      {x:10,y:5,w:80,h:30, config:{font_size:6,color:'#ffffff',show_seconds:false,show_date:true,date_format:'full',date_font_size:2,date_color:'#aaaacc'}},
+  text:       {x:10,y:40,w:80,h:20, config:{text:'Votre texte ici',font_size:3,color:'#ffffff',align:'center',bold:false,italic:false}},
+  weather:    {x:5,y:55,w:45,h:40, config:{lat:48.85,lon:2.35,city:'Paris',unit:'celsius',temp_font_size:8,icon_font_size:7,desc_font_size:3,city_font_size:3,color:'#ffffff'}},
   media:      {x:55,y:5,w:40,h:55, config:{fit:'contain',duration:8}},
-  ticker:     {x:0,y:88,w:100,h:12, config:{rss_url:'',font_size:28,color:'#ffffff',bg_color:'rgba(0,0,0,0.6)',speed:60}},
+  ticker:     {x:0,y:88,w:100,h:12, config:{rss_url:'',font_size:22,color:'#ffffff',bg_color:'rgba(0,0,0,0.6)',speed:60}},
 };
 
 function addWidget(type) {
@@ -989,16 +989,17 @@ function renderWidgetProps() {
     typeFields = `<div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#1a1a2e'}" onchange="_pbSetC('color',this.value)"></div>`;
   } else if (w.type === 'clock') {
     typeFields = `
-      <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||90}" min="10" max="300" onchange="_pbSetC('font_size',+this.value)"></div>
+      <div class="prop-row"><label>Taille (%larg.)</label><input type="number" value="${c.font_size||6}" min="1" max="50" onchange="_pbSetC('font_size',+this.value)"></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
       <div class="prop-row"><label>Secondes</label><input type="checkbox" ${c.show_seconds?'checked':''} onchange="_pbSetC('show_seconds',this.checked)"></div>
       <div class="prop-row"><label>Afficher date</label><input type="checkbox" ${c.show_date?'checked':''} onchange="_pbSetC('show_date',this.checked)"></div>
-      <div class="prop-row"><label>Taille date px</label><input type="number" value="${c.date_font_size||28}" min="10" max="200" onchange="_pbSetC('date_font_size',+this.value)"></div>
+      <div class="prop-row"><label>Format date</label><select onchange="_pbSetC('date_format',this.value)"><option value="full" ${(!c.date_format||c.date_format==='full')?'selected':''}>Complet (Lundi 1 avril 2026)</option><option value="short" ${c.date_format==='short'?'selected':''}>Court (JJ/MM/AAAA)</option></select></div>
+      <div class="prop-row"><label>Taille date (%)</label><input type="number" value="${c.date_font_size||2}" min="1" max="30" onchange="_pbSetC('date_font_size',+this.value)"></div>
       <div class="prop-row"><label>Couleur date</label><input type="color" value="${c.date_color||'#aaaacc'}" onchange="_pbSetC('date_color',this.value)"></div>`;
   } else if (w.type === 'text') {
     typeFields = `
       <div class="prop-row"><label>Texte</label><textarea rows="3" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;" onchange="_pbSetC('text',this.value)">${c.text||''}</textarea></div>
-      <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||48}" min="8" max="300" onchange="_pbSetC('font_size',+this.value)"></div>
+      <div class="prop-row"><label>Taille (%larg.)</label><input type="number" value="${c.font_size||3}" min="1" max="50" onchange="_pbSetC('font_size',+this.value)"></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
       <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>
       <div class="prop-row"><label>Gras</label><input type="checkbox" ${c.bold?'checked':''} onchange="_pbSetC('bold',this.checked)"></div>
@@ -1014,7 +1015,7 @@ function renderWidgetProps() {
       <div id="pb-weather-coords" style="font-size:11px;color:var(--text-3);padding:2px 0 4px 90px">${hasCoords ? `📍 ${c.lat}, ${c.lon}` : 'Entrez une ville et cliquez 🔍'}</div>
       <div class="prop-row"><label>Unité</label><select onchange="_pbSetC('unit',this.value)"><option value="celsius" ${c.unit!=='fahrenheit'?'selected':''}>Celsius (°C)</option><option value="fahrenheit" ${c.unit==='fahrenheit'?'selected':''}>Fahrenheit (°F)</option></select></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
-      <div class="prop-row"><label>Taille temp px</label><input type="number" value="${c.temp_font_size||72}" min="10" max="300" onchange="_pbSetC('temp_font_size',+this.value)"></div>`;
+      <div class="prop-row"><label>Taille temp (%larg.)</label><input type="number" value="${c.temp_font_size||8}" min="1" max="50" onchange="_pbSetC('temp_font_size',+this.value)"></div>`;
   } else if (w.type === 'media') {
     const srcType = c.source_type || 'all';
     const isFile = srcType.startsWith('file:');
@@ -1038,7 +1039,7 @@ function renderWidgetProps() {
   } else if (w.type === 'ticker') {
     typeFields = `
       <div class="prop-row"><label>URL RSS</label><input type="url" value="${c.rss_url||''}" placeholder="https://..." onchange="_pbSetC('rss_url',this.value)" style="width:100%"></div>
-      <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||28}" min="10" max="100" onchange="_pbSetC('font_size',+this.value)"></div>
+      <div class="prop-row"><label>Taille (%min)</label><input type="number" value="${c.font_size||22}" min="5" max="80" onchange="_pbSetC('font_size',+this.value)"></div>
       <div class="prop-row"><label>Couleur texte</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
       <div class="prop-row"><label>Couleur fond</label><input type="color" value="${_rgbaToHex(c.bg_color||'#000000')}" onchange="_pbSetC('bg_color',this.value)"></div>
       <div class="prop-row"><label>Vitesse px/s</label><input type="number" value="${c.speed||60}" min="10" max="500" onchange="_pbSetC('speed',+this.value)"></div>`;
