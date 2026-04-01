@@ -1305,7 +1305,10 @@ def rss_proxy():
         return jsonify({"error": "URL invalide"}), 400
 
     try:
-        req = _urlreq.Request(raw_url, headers={"User-Agent": "RMGSignage/1.0"})
+        req = _urlreq.Request(raw_url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; Feedfetcher-Google; +http://www.google.com/feedfetcher.html)",
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+        })
         with _urlreq.urlopen(req, timeout=8) as resp:
             xml_bytes = resp.read()
     except Exception as e:
