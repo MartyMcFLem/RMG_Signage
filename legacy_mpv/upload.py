@@ -321,7 +321,7 @@ def send_mpv_command(command):
         sock.close()
         return True
     except:
-        return False
+        return False 
 
 
 def update_mpv_playlist():

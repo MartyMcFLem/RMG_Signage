@@ -2,12 +2,14 @@ from flask import Flask, request, redirect, jsonify, send_from_directory, render
 from werkzeug.utils import secure_filename
 import os
 import re
+import copy
 import threading
 import subprocess
 import time
 import json
 import shutil
 import uuid as _uuid
+import urllib.request
 
 # === CONFIG ===
 HOME_DIR = os.path.expanduser("~")
@@ -65,11 +67,14 @@ config = {
     "pages": [],             # pages de signage avec widgets
 }
 
+config = dict(_DEFAULT_CONFIG)
+_config_lock = threading.Lock()
+
 if os.path.exists(CONFIG_FILE):
     try:
         with open(CONFIG_FILE, 'r') as f:
             config.update(json.load(f))
-    except:
+    except (IOError, json.JSONDecodeError, ValueError):
         pass
 
 player_process = None
@@ -82,15 +87,11 @@ _kiosk_next_event = threading.Event()
 # Événement utilisé pour signaler «afficher l'écran IP» depuis l'API.
 _show_ip_event = threading.Event()
 
-# Taille maximale d'upload : 500 Mo
-MAX_UPLOAD_SIZE = 500 * 1024 * 1024
+_weather_cache = {"data": None, "fetched_at": 0}
+_news_cache    = {"data": None, "fetched_at": 0, "url": ""}
 
-# Extensions media autorisées à l'upload
-ALLOWED_UPLOAD_EXTENSIONS = {
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
-    '.heic', '.heif',
-    '.mp4', '.avi', '.mkv', '.mov', '.webm', '.m4v'
-}
+_SERIAL_PATTERN = re.compile(r'^rmg-sign-[a-z0-9]{16}$')
+_device_serial  = None
 
 
 def _license_hmac(data_bytes):
@@ -244,13 +245,27 @@ def check_upload_quota(file_size_bytes):
 
 _SERIAL_PATTERN = re.compile(r'^rmg-sign-[a-z0-9]{16}$')
 
-# Serial mis en cache au démarrage
-_device_serial = None
+def _safe_filename(filename, base_dir):
+    if not filename:
+        return None
+    safe = secure_filename(filename)
+    if not safe:
+        return None
+    full_path = os.path.realpath(os.path.join(base_dir, safe))
+    if not full_path.startswith(os.path.realpath(base_dir) + os.sep):
+        return None
+    return full_path
+
+
+def _save_config():
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except (IOError, OSError):
+        pass
 
 
 def _generate_serial_suffix():
-    """Génère le suffixe du serial : CPU serial Pi complet (16 chars) ou UUID fallback."""
-    # Méthode 1 : CPU serial du Raspberry Pi (positions [10:26] de la ligne Serial)
     try:
         with open('/proc/cpuinfo', 'r') as f:
             for line in f:
@@ -258,64 +273,49 @@ def _generate_serial_suffix():
                     suffix = line[10:26].strip()
                     if len(suffix) == 16 and re.match(r'^[0-9a-f]{16}$', suffix):
                         return suffix
-    except Exception:
+    except (IOError, OSError):
         pass
-    # Méthode 2 : UUID aléatoire persisté (16 chars hex)
     serial_file = '/etc/rmg_serial'
     try:
         if os.path.exists(serial_file):
             stored = open(serial_file).read().strip()
             if len(stored) == 16:
                 return stored
-    except Exception:
+    except (IOError, OSError):
         pass
     suffix = _uuid.uuid4().hex[:16]
     try:
         with open(serial_file, 'w') as f:
             f.write(suffix)
-    except Exception:
+    except (IOError, OSError):
         pass
     return suffix
 
 
 def get_device_serial():
-    """Retourne le numéro de série du device (rmg-sign-XXXXXXXXX).
-    Priorité : hostname OS → config.json → génération depuis CPU serial ou UUID.
-    En fallback, tente de corriger le hostname via sudo hostnamectl."""
     global _device_serial, config
     if _device_serial:
         return _device_serial
-
     import socket as _socket
     hostname = _socket.gethostname()
     if _SERIAL_PATTERN.match(hostname):
         _device_serial = hostname
         return _device_serial
-
-    # Fallback : serial stocké dans config
     stored = config.get('device_serial', '')
     if stored and _SERIAL_PATTERN.match(stored):
         _device_serial = stored
         return _device_serial
-
-    # Génération
     serial = f"rmg-sign-{_generate_serial_suffix()}"
-    config['device_serial'] = serial
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except Exception:
-        pass
-
-    # Tenter de corriger le hostname (nécessite sudoers rmg_hostname)
+    with _config_lock:
+        config['device_serial'] = serial
+        _save_config()
     try:
         subprocess.run(
             ['sudo', 'hostnamectl', 'set-hostname', serial],
             capture_output=True, timeout=5
         )
-    except Exception:
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass
-
     _device_serial = serial
     return _device_serial
 
@@ -350,10 +350,9 @@ def get_app_version():
 
 
 def is_media_file(filename):
-    """Vérifie si un fichier est un média valide"""
     if filename.startswith('.'):
         return False
-    if filename in ['config.json', 'Thumbs.db', '.DS_Store']:
+    if filename in ('config.json', 'Thumbs.db', '.DS_Store'):
         return False
     ext = os.path.splitext(filename.lower())[1]
     if ext == '.json':
@@ -370,12 +369,9 @@ def get_kiosk_url():
 
 
 def get_local_ip(retries=8, delay=2.0):
-    """Retourne l'adresse IP locale. Réessaie plusieurs fois pour laisser
-    le réseau s'initialiser au démarrage du Pi."""
     import socket as _socket
 
     def _try_udp():
-        """Méthode UDP (pas de paquet réellement envoyé)"""
         s = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
         s.settimeout(1)
         s.connect(("8.8.8.8", 80))
@@ -384,15 +380,10 @@ def get_local_ip(retries=8, delay=2.0):
         return ip
 
     def _try_hostname():
-        """Via le hostname local"""
         return _socket.gethostbyname(_socket.gethostname())
 
     def _try_ifconfig():
-        """Lecture directe de l'interface réseau via ip/ifconfig"""
-        for cmd in (
-            ["ip", "-4", "addr", "show", "scope", "global"],
-            ["hostname", "-I"],
-        ):
+        for cmd in (["ip", "-4", "addr", "show", "scope", "global"], ["hostname", "-I"]):
             try:
                 out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode()
                 if cmd[0] == "hostname":
@@ -400,12 +391,11 @@ def get_local_ip(retries=8, delay=2.0):
                     if ips:
                         return ips[0]
                 else:
-                    import re
                     ips = re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", out)
                     ips = [ip for ip in ips if not ip.startswith("127.")]
                     if ips:
                         return ips[0]
-            except Exception:
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError):
                 pass
         return None
 
@@ -415,7 +405,7 @@ def get_local_ip(retries=8, delay=2.0):
                 ip = method()
                 if ip and not ip.startswith("127.") and ip != "0.0.0.0":
                     return ip
-            except Exception:
+            except (OSError, _socket.error):
                 pass
         if attempt < retries - 1:
             time.sleep(delay)
@@ -423,10 +413,7 @@ def get_local_ip(retries=8, delay=2.0):
 
 
 def generate_welcome_screen():
-    """Génère un écran de bienvenue affichant l'adresse IP pour le premier démarrage.
-    Fond basé sur static/splash.png si disponible (flouté + assombri).
-    Inclut un QR code pointant vers l'interface web si le module qrcode est installé.
-    Retourne le chemin vers l'image PNG générée, ou None en cas d'échec."""
+    """Génère une image PNG de bienvenue (conservé pour compatibilité)."""
     welcome_path = os.path.join(MEDIA_DIR, ".welcome_screen.png")
     try:
         from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
@@ -434,9 +421,7 @@ def generate_welcome_screen():
         url = f"http://{ip}:{FLASK_PORT}"
         W, H = 1920, 1080
         cx, cy = W // 2, H // 2
-
-        # ── Background : splash.png flouté/assombri, ou fond sombre par défaut ────
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_dir  = os.path.dirname(os.path.abspath(__file__))
         splash_path = os.path.join(script_dir, 'static', 'splash.png')
         if os.path.exists(splash_path):
             try:
@@ -444,14 +429,12 @@ def generate_welcome_screen():
                 bg = bg.filter(ImageFilter.GaussianBlur(radius=10))
                 bg = ImageEnhance.Brightness(bg).enhance(0.35)
                 img = bg
-            except Exception:
+            except (IOError, OSError):
                 img = Image.new("RGB", (W, H), color=(10, 10, 26))
         else:
             img = Image.new("RGB", (W, H), color=(10, 10, 26))
-
-        # ── Overlay plein écran semi-transparent 30% ──────────────────────────
         overlay = Image.new('RGBA', (W, H), (0, 0, 0, 77))
-        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        img  = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
         draw = ImageDraw.Draw(img)
 
         def load_font(name, size):
@@ -461,7 +444,7 @@ def generate_welcome_screen():
             ]:
                 try:
                     return ImageFont.truetype(path, size)
-                except Exception:
+                except (IOError, OSError):
                     pass
             return ImageFont.load_default()
 
@@ -469,18 +452,15 @@ def generate_welcome_screen():
         font_sub   = load_font("DejaVuSans.ttf", 44)
         font_url   = load_font("DejaVuSans-Bold.ttf", 60)
         font_hint  = load_font("DejaVuSans.ttf", 30)
-
         qr_size = 240
-        qr_x    = cx - qr_size // 2
-        qr_y    = cy + 110
-
-        # ── Texte ───────────────────────────────────────────────────────────────
+        qr_x = cx - qr_size // 2
+        qr_y = cy + 110
         try:
             draw.text((cx, cy - 260), "RMG Signage",
                       fill=(255, 255, 255), font=font_title, anchor="mm")
             draw.line([(cx - 340, cy - 188), (cx + 340, cy - 188)],
                       fill=(70, 70, 110), width=2)
-            draw.text((cx, cy - 125), "Aucun média à afficher",
+            draw.text((cx, cy - 125), "Aucun media a afficher",
                       fill=(140, 140, 165), font=font_sub, anchor="mm")
             draw.text((cx, cy - 20), url,
                       fill=(74, 158, 255), font=font_url, anchor="mm")
@@ -490,42 +470,28 @@ def generate_welcome_screen():
             draw.text((50, 80),  "RMG Signage", fill=(255, 255, 255), font=font_title)
             draw.text((50, 220), "Aucun media",  fill=(140, 140, 165), font=font_sub)
             draw.text((50, 380), url,            fill=(74, 158, 255),  font=font_url)
-
-        # ── QR code ─────────────────────────────────────────────────────────────
         try:
             import qrcode as _qrcode
-            qr = _qrcode.QRCode(
-                box_size=10, border=3,
-                error_correction=_qrcode.constants.ERROR_CORRECT_M
-            )
+            qr = _qrcode.QRCode(box_size=10, border=3,
+                                 error_correction=_qrcode.constants.ERROR_CORRECT_M)
             qr.add_data(url)
             qr.make(fit=True)
-            # make_image() retourne un objet PilImage (wrapper qrcode) ;
-            # on récupère le PIL Image sous-jacent via get_image() si disponible,
-            # sinon on force la conversion directement.
             qr_wrapped = qr.make_image(fill_color="black", back_color="white")
-            if hasattr(qr_wrapped, 'get_image'):
-                qr_pil = qr_wrapped.get_image().convert('RGB')
-            else:
-                qr_pil = qr_wrapped.convert('RGB')
+            qr_pil = (qr_wrapped.get_image() if hasattr(qr_wrapped, 'get_image')
+                      else qr_wrapped).convert('RGB')
             qr_pil = qr_pil.resize((qr_size, qr_size), Image.NEAREST)
-            # Fond blanc légèrement plus grand pour lisibilité du scanner
             pad = 10
-            draw.rectangle(
-                [qr_x - pad, qr_y - pad, qr_x + qr_size + pad, qr_y + qr_size + pad],
-                fill=(255, 255, 255)
-            )
+            draw.rectangle([qr_x - pad, qr_y - pad, qr_x + qr_size + pad, qr_y + qr_size + pad],
+                           fill=(255, 255, 255))
             img.paste(qr_pil, (qr_x, qr_y))
         except ImportError:
-            # qrcode non installé — on répète l'URL à la place
             draw.text((cx, qr_y + qr_size // 2), url,
                       fill=(74, 158, 255), font=font_url, anchor="mm")
-
         os.makedirs(MEDIA_DIR, exist_ok=True)
         img.save(welcome_path)
         return welcome_path
     except Exception as e:
-        print(f"⚠️  Écran de bienvenue non généré : {e}")
+        print(f"Ecran de bienvenue non genere : {e}")
         return None
 
 
@@ -540,7 +506,7 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE
 @app.route("/", methods=["GET", "POST"])
 def upload():
     if request.method == "POST":
-        files = request.files.getlist("files")
+        files       = request.files.getlist("files")
         files_saved = 0
         reject_reason = ""
         for f in files:
@@ -550,7 +516,7 @@ def upload():
             if not safe_name:
                 continue
             ext = os.path.splitext(safe_name.lower())[1]
-            if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+            if ext not in ALLOWED_EXTENSIONS:
                 continue
             f.seek(0, 2)
             file_size = f.tell()
@@ -567,13 +533,16 @@ def upload():
         if reject_reason and files_saved == 0:
             return redirect("/?error=" + reject_reason)
         return redirect("/")
-
     return render_template('index.html')
+
+
+@app.route("/player")
+def player():
+    return render_template('player.html')
 
 
 @app.route("/api/logo", methods=["POST", "DELETE"])
 def manage_logo():
-    """Upload ou suppression du logo (stocké dans static/logo.png)"""
     logo_path = os.path.join(app.root_path, 'static', 'logo.png')
     if request.method == "POST":
         f = request.files.get('logo')
@@ -582,21 +551,19 @@ def manage_logo():
         try:
             os.makedirs(os.path.join(app.root_path, 'static'), exist_ok=True)
             f.save(logo_path)
-            return jsonify({"success": True, "message": "Logo mis à jour"})
-        except Exception as e:
+            return jsonify({"success": True, "message": "Logo mis a jour"})
+        except (IOError, OSError) as e:
             return jsonify({"success": False, "message": str(e)}), 500
-
-    # DELETE
     if os.path.exists(logo_path):
         try:
             os.remove(logo_path)
-            return jsonify({"success": True, "message": "Logo supprimé"})
-        except Exception as e:
+            return jsonify({"success": True, "message": "Logo supprime"})
+        except (IOError, OSError) as e:
             return jsonify({"success": False, "message": str(e)}), 500
-    return jsonify({"success": False, "message": "Aucun logo trouvé"}), 404
+    return jsonify({"success": False, "message": "Aucun logo trouve"}), 404
 
 
-# === API ENDPOINTS ===
+# === API ===
 
 @app.route("/api/storage")
 def api_storage():
@@ -662,7 +629,7 @@ def get_status():
     try:
         media_count = len([f for f in os.listdir(MEDIA_DIR)
                            if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)])
-    except Exception:
+    except OSError:
         media_count = 0
     storage = get_storage_info()
     return jsonify({
@@ -678,17 +645,19 @@ def get_status():
 @app.route("/api/files")
 def list_files():
     try:
-        files = [f for f in os.listdir(MEDIA_DIR)
-                 if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)]
-        files.sort()
+        files = sorted([f for f in os.listdir(MEDIA_DIR)
+                        if os.path.isfile(os.path.join(MEDIA_DIR, f)) and is_media_file(f)])
         return jsonify(files)
-    except:
+    except OSError:
         return jsonify([])
 
 
 @app.route("/media/<filename>")
 def serve_media(filename):
-    return send_from_directory(MEDIA_DIR, filename)
+    safe = secure_filename(filename)
+    if not safe:
+        return jsonify({"success": False, "message": "Nom de fichier invalide"}), 400
+    return send_from_directory(MEDIA_DIR, safe)
 
 
 @app.route("/images/<path:filename>")
@@ -852,7 +821,17 @@ def delete_file(filename):
                 pass
             return jsonify({"success": True, "message": f"{filename} supprimé"})
         return jsonify({"success": False, "message": "Fichier introuvable"}), 404
-    except Exception as e:
+    try:
+        os.remove(path)
+        safe = secure_filename(filename)
+        with _config_lock:
+            config.get('file_durations', {}).pop(safe, None)
+            fo = config.get('file_order', [])
+            if safe in fo:
+                fo.remove(safe)
+            _save_config()
+        return jsonify({"success": True, "message": f"{safe} supprime"})
+    except (IOError, OSError) as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -860,7 +839,6 @@ def delete_file(filename):
 def manage_config():
     global config
     if request.method == "POST":
-        old_config = config.copy()
         data = request.json
         # Ne pas écraser file_order et file_durations via cet endpoint
         data.pop('file_order', None)
@@ -883,7 +861,6 @@ def manage_config():
 
 @app.route("/api/order", methods=["POST"])
 def save_order():
-    """Sauvegarde l'ordre personnalisé des fichiers"""
     global config
     data = request.json
     config['file_order'] = data.get('order', [])
@@ -899,9 +876,8 @@ def save_order():
 
 @app.route("/api/file-duration/<filename>", methods=["POST"])
 def set_file_duration(filename):
-    """Définit la durée d'affichage personnalisée d'un fichier"""
     global config
-    data = request.json
+    data     = request.json
     duration = data.get('duration')
     if 'file_durations' not in config:
         config['file_durations'] = {}
@@ -945,8 +921,8 @@ def control_player(action):
 @app.route("/api/play-single/<filename>", methods=["POST"])
 def play_single_file(filename):
     global config
-    path = os.path.join(MEDIA_DIR, filename)
-    if not os.path.exists(path):
+    path = _safe_filename(filename, MEDIA_DIR)
+    if not path or not os.path.exists(path):
         return jsonify({"success": False, "message": "Fichier introuvable"}), 404
     config['single_file_mode'] = True
     config['selected_file'] = filename
@@ -1423,43 +1399,41 @@ def update_git_status():
     """Retourne les informations git actuelles (branche locale + dernier commit de origin/main)"""
     script_dir = PROJECT_DIR
     try:
-        # État local
         commit = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
         branch = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
         msg = subprocess.check_output(
             [GIT_BINARY, "log", "-1", "--pretty=%s"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
-        # Hash du dernier commit sur origin/<branche> (fetch silencieux)
         try:
             subprocess.check_output(
                 [GIT_BINARY, "fetch", "origin", GIT_BRANCH],
-                cwd=script_dir, stderr=subprocess.STDOUT
+                cwd=PROJECT_DIR, stderr=subprocess.STDOUT
             )
             remote_commit = subprocess.check_output(
                 [GIT_BINARY, "rev-parse", "--short", f"origin/{GIT_BRANCH}"],
-                cwd=script_dir, stderr=subprocess.STDOUT
+                cwd=PROJECT_DIR, stderr=subprocess.STDOUT
             ).decode().strip()
-        except Exception:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             remote_commit = None
         return jsonify({
-            "success": True,
-            "commit": commit,
-            "branch": branch,
+            "success":        True,
+            "commit":         commit,
+            "branch":         branch,
             "tracked_branch": GIT_BRANCH,
-            "last_message": msg,
-            "remote_commit": remote_commit,
-            "up_to_date": commit == remote_commit if remote_commit else None
+            "last_message":   msg,
+            "remote_commit":  remote_commit,
+            "up_to_date":     commit == remote_commit if remote_commit else None,
         })
     except subprocess.CalledProcessError as e:
         return jsonify({"success": False, "message": e.output.decode().strip()})
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
         return jsonify({"success": False, "message": str(e)})
 
 
@@ -1470,60 +1444,50 @@ def update_from_github():
     try:
         before = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
-
-        # 1. Récupérer origin/<branche>
         fetch_out = subprocess.check_output(
             [GIT_BINARY, "fetch", "origin", GIT_BRANCH],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
-
-        # 2. Basculer sur la branche cible si nécessaire
         current_branch = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
         checkout_out = ""
         if current_branch != GIT_BRANCH:
             checkout_out = subprocess.check_output(
                 [GIT_BINARY, "checkout", GIT_BRANCH],
-                cwd=script_dir, stderr=subprocess.STDOUT
+                cwd=PROJECT_DIR, stderr=subprocess.STDOUT
             ).decode().strip()
-
-        # 3. Aligner strictement sur origin/<branche> (ignore toute modif locale)
         reset_out = subprocess.check_output(
             [GIT_BINARY, "reset", "--hard", f"origin/{GIT_BRANCH}"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
-
         after = subprocess.check_output(
             [GIT_BINARY, "rev-parse", "--short", "HEAD"],
-            cwd=script_dir, stderr=subprocess.STDOUT
+            cwd=PROJECT_DIR, stderr=subprocess.STDOUT
         ).decode().strip()
-
         output_lines = [l for l in [fetch_out, checkout_out, reset_out] if l]
-        pull_out = "\n".join(output_lines)
-
         updated = before != after
         if updated:
+            svc = SERVICE_NAME
             def delayed_restart():
                 time.sleep(1.5)
                 subprocess.Popen(["sudo", "reboot"])
             threading.Thread(target=delayed_restart, daemon=True).start()
-
         return jsonify({
             "success": True,
             "updated": updated,
-            "branch": GIT_BRANCH,
-            "before": before,
-            "after": after,
-            "output": pull_out,
-            "message": "Mise à jour effectuée, redémarrage en cours…" if updated else "Déjà à jour"
+            "branch":  GIT_BRANCH,
+            "before":  before,
+            "after":   after,
+            "output":  "\n".join(output_lines),
+            "message": "Mise a jour effectuee, redemarrage en cours..." if updated else "Deja a jour",
         })
     except subprocess.CalledProcessError as e:
         return jsonify({"success": False, "message": e.output.decode().strip()}), 500
-    except Exception as e:
+    except (FileNotFoundError, OSError) as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -1661,17 +1625,17 @@ def restart_chromium():
 
 
 if __name__ == "__main__":
+    import urllib.parse
     os.makedirs(MEDIA_DIR, exist_ok=True)
-    # Initialisation du serial dès le démarrage (corrige le hostname si nécessaire)
-    print(f"🔑 Numéro de série : {get_device_serial()}")
+    print(f"Numero de serie : {get_device_serial()}")
 
     if not os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f, indent=2)
-            print(f"✅ Fichier de configuration créé : {CONFIG_FILE}")
-        except Exception as e:
-            print(f"⚠️ Impossible de créer config.json : {e}")
+            print(f"Fichier de configuration cree : {CONFIG_FILE}")
+        except (IOError, OSError) as e:
+            print(f"Impossible de creer config.json : {e}")
 
     # Chromium tourne en thread daemon : quand restart_chromium() le tue, proc.wait() retourne
     # et le thread s'arrête proprement sans emporter toute l'application.
