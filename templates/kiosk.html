@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="google" content="notranslate">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RMG Signage — Kiosk</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      cursor: none;
+    }
+    #media-container {
+      position: relative;
+      width: 100%; height: 100%;
+    }
+    /* Image display */
+    #media-img {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    /* Video display */
+    #media-video {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: none;
+      background: #000;
+    }
+    /* Welcome / no-media screen */
+    #welcome {
+      display: none;
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      background: #000;
+    }
+    #welcome img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+    }
+    /* IP overlay */
+    #ip-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      z-index: 200;
+      background: #000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 3vmin;
+      font-family: 'DejaVu Sans', sans-serif;
+      color: #fff;
+      text-align: center;
+      padding: 5vmin;
+    }
+    #ip-overlay.visible { display: flex; }
+    #ip-overlay h1 {
+      font-size: 4vmin;
+      font-weight: bold;
+      color: #aab4ff;
+      letter-spacing: 0.04em;
+      margin: 0;
+    }
+    #ip-overlay .ip-url {
+      font-size: 6vmin;
+      font-weight: bold;
+      color: #4a9eff;
+      letter-spacing: 0.02em;
+    }
+    #ip-overlay .ip-hint {
+      font-size: 2.5vmin;
+      color: #aaa;
+    }
+    #ip-overlay .qr-box {
+      background: #fff;
+      padding: 2vmin;
+      border-radius: 2vmin;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #ip-overlay .qr-box img {
+      width: 24vmin;
+      height: 24vmin;
+      image-rendering: pixelated;
+    }
+    #ip-overlay .ip-countdown {
+      font-size: 2vmin;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div id="media-container">
+    <img  id="media-img"   src="" alt="">
+    <video id="media-video" src="" muted autoplay playsinline></video>
+    <div  id="welcome">
+      <!-- L'écran de bienvenue PNG est servi via /media/.welcome_screen.png quand disponible -->
+      <img id="welcome-img" src="" alt="RMG Signage">
+    </div>
+  </div>
+
+  <!-- Overlay IP (affiché temporairement via l'action "Afficher IP") -->
+  <div id="ip-overlay">
+    <h1>RMG Signage</h1>
+    <div class="ip-url" id="ip-display">...</div>
+    <div class="ip-hint">Scannez pour accéder à l'interface</div>
+    <div class="qr-box">
+      <img id="qr-img" src="" alt="QR Code">
+    </div>
+    <div class="ip-countdown" id="ip-countdown"></div>
+  </div>
+
+  <!-- Iframe pour les pages de signage -->
+  <iframe id="signage-iframe" src="" title="Signage page"
+          style="position:fixed;inset:0;width:100%;height:100%;border:none;display:none;z-index:50;"></iframe>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   RMG Signage — Kiosk slideshow
+   Architecture :
+   - Toutes les 2 s, poll /api/kiosk/state pour détecter les changements
+     de playlist (génération) ou l'action "suivant" déclenchée depuis l'UI.
+   - La rotation CSS est appliquée via transform sur le conteneur.
+   - Les durées par fichier (file_durations) sont respectées.
+   - Les vidéos jouent jusqu'à leur fin (ou sont arrêtées si l'UI demande "suivant").
+   ═══════════════════════════════════════════════════ */
+
+const POLL_INTERVAL_MS  = 2000;   // fréquence de poll de l'état
+const DEFAULT_DURATION  = 8;      // secondes par défaut pour les images
+
+let _state = {
+  generation: -1,
+  files: [],
+  config: {
+    image_duration: DEFAULT_DURATION,
+    shuffle: false,
+    loop: true,
+    rotation: 0,
+    single_file_mode: false,
+    file_durations: {},
+  },
+};
+
+let _playlist  = [];   // médias (filenames) de la playlist courante
+let _index     = 0;    // index courant dans _playlist
+let _pages_list = [];  // pages de signage [{type,id,name,duration}]
+let _page_index = -1;  // -1 = phase média, ≥ 0 = index dans _pages_list
+let _timer     = null; // setTimeout pour avancer
+let _playing   = false;
+let _ipTimer   = null; // setTimeout pour masquer l'overlay IP
+
+const imgEl     = document.getElementById('media-img');
+const videoEl   = document.getElementById('media-video');
+const welcomeEl = document.getElementById('welcome');
+const welcomeImg = document.getElementById('welcome-img');
+const container = document.getElementById('media-container');
+const ipOverlay  = document.getElementById('ip-overlay');
+const ipDisplay  = document.getElementById('ip-display');
+const qrImg      = document.getElementById('qr-img');
+const ipCountdown = document.getElementById('ip-countdown');
+const signageEl  = document.getElementById('signage-iframe');
+
+/* ── Rotation ────────────────────────────────────── */
+function applyRotation(deg) {
+  const d = parseInt(deg) || 0;
+  if (d === 90 || d === 270) {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const scale = Math.min(vw / vh, vh / vw);
+    container.style.transform = `rotate(${d}deg) scale(${scale})`;
+  } else {
+    container.style.transform = `rotate(${d}deg)`;
+  }
+}
+
+/* ── Helpers ─────────────────────────────────────── */
+const VIDEO_EXT = /\.(mp4|avi|mkv|mov|webm|m4v)$/i;
+const isVideo = f => VIDEO_EXT.test(f);
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildPlaylist(state) {
+  let files = [...state.files];
+  if (state.config.shuffle) files = shuffle(files);
+  return files;
+}
+
+/* ── Pages de signage ────────────────────── */
+function buildPagesList(state) {
+  return (state.items || []).filter(item => item.type === 'page');
+}
+
+function showSignagePage(pageItem) {
+  hideAll();
+  signageEl.src = '/signage/' + pageItem.id + '?t=' + Date.now();
+  signageEl.style.display = 'block';
+  // Pas de timer : la page reste affichée jusqu'au prochain changement de génération
+  // ou jusqu'à un événement "suivant" déclenché depuis l'interface.
+}
+
+function advanceFromPage() {
+  // Retour en phase média après les pages
+  _page_index = -1;
+  if (_playlist.length === 0) {
+    // Mode page seule : boucler sur la liste de pages
+    if (_pages_list.length > 0) {
+      _page_index = 0;
+      showSignagePage(_pages_list[0]);
+    } else {
+      showWelcome();
+    }
+    return;
+  }
+  _index = (_index + 1) % _playlist.length;
+  if (!_state.config.loop && _index === 0) {
+    _index = _playlist.length - 1;
+  }
+  showMedia(_playlist[_index]);
+}
+
+/* ── Affichage ───────────────────────────────────── */
+function hideAll() {
+  imgEl.style.display   = 'none';
+  videoEl.style.display = 'none';
+  welcomeEl.style.display = 'none';
+  signageEl.style.display = 'none';
+  signageEl.src = '';
+  videoEl.pause();
+  clearTimeout(_timer);
+  _timer = null;
+}
+
+function showWelcome() {
+  hideAll();
+  // Essaie d'afficher l'écran de bienvenue généré par Flask (si dispo)
+  const ts = Date.now();
+  welcomeImg.src = `/media/.welcome_screen.png?t=${ts}`;
+  welcomeEl.style.display = 'block';
+}
+
+function showMedia(filename) {
+  hideAll();
+  if (isVideo(filename)) {
+    videoEl.src = `/media/${encodeURIComponent(filename)}`;
+    videoEl.style.display = 'block';
+    videoEl.load();
+    videoEl.play().catch(() => {});
+    // Avancer quand la vidéo se termine
+    videoEl.onended = () => advance();
+    videoEl.onerror = () => { setTimeout(() => advance(), 1000); };
+  } else {
+    const dur = (_state.config.file_durations[filename] ?? _state.config.image_duration ?? DEFAULT_DURATION) * 1000;
+    imgEl.src = `/media/${encodeURIComponent(filename)}`;
+    imgEl.style.display = 'block';
+    imgEl.onerror = () => { setTimeout(() => advance(), 1000); };
+    _timer = setTimeout(() => advance(), dur);
+  }
+}
+
+function advance() {
+  if (_page_index >= 0) {
+    // Phase pages : avancer à la page suivante
+    _page_index++;
+    if (_page_index < _pages_list.length) {
+      showSignagePage(_pages_list[_page_index]);
+    } else {
+      advanceFromPage();
+    }
+    return;
+  }
+
+  // Phase média
+  if (_playlist.length === 0 && _pages_list.length === 0) { showWelcome(); return; }
+  if (_playlist.length === 0) {
+    _page_index = 0;
+    showSignagePage(_pages_list[0]);
+    return;
+  }
+
+  _index = (_index + 1) % _playlist.length;
+  // Fin de cycle média → afficher les pages si présentes
+  if (_index === 0 && _pages_list.length > 0) {
+    if (!_state.config.loop) { _index = _playlist.length - 1; showMedia(_playlist[_index]); return; }
+    _page_index = 0;
+    showSignagePage(_pages_list[0]);
+    return;
+  }
+  if (!_state.config.loop && _index === 0) {
+    _index = _playlist.length - 1;
+    showMedia(_playlist[_index]);
+    return;
+  }
+  showMedia(_playlist[_index]);
+}
+
+/* ── Chargement de la playlist ───────────────────── */
+function loadPlaylist(state, preserveIndex) {
+  _state = state;
+  applyRotation(state.config.rotation);
+
+  _pages_list = buildPagesList(state);
+  const newPlaylist = buildPlaylist(state);
+
+  if (newPlaylist.length === 0 && _pages_list.length === 0) {
+    _playlist = [];
+    _index = 0;
+    _page_index = -1;
+    showWelcome();
+    return;
+  }
+
+  const prevFile = _playlist[_index];
+  _playlist = newPlaylist;
+  _page_index = -1;
+
+  if (!preserveIndex) {
+    _index = 0;
+  } else if (prevFile) {
+    const ni = _playlist.indexOf(prevFile);
+    _index = ni >= 0 ? ni : 0;
+  }
+
+  if (_playlist.length === 0) {
+    // Uniquement des pages
+    _page_index = 0;
+    showSignagePage(_pages_list[0]);
+  } else {
+    showMedia(_playlist[_index]);
+  }
+}
+
+/* ── Overlay IP ──────────────────────────────────── */
+async function showIpOverlay() {
+  clearTimeout(_ipTimer);
+  try {
+    const resp = await fetch('/api/kiosk/ip-info');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    ipDisplay.textContent = data.url || data.ip;
+    if (data.qr) {
+      qrImg.src = data.qr;
+      qrImg.style.display = 'block';
+    } else {
+      qrImg.style.display = 'none';
+    }
+  } catch (e) {
+    ipDisplay.textContent = 'IP indisponible';
+    qrImg.style.display = 'none';
+  }
+
+  ipOverlay.classList.add('visible');
+
+  // Fermer sur clic/tap
+  ipOverlay.onclick = hideIpOverlay;
+
+  // Auto-fermeture après 30 s avec compte à rebours
+  let remaining = 30;
+  ipCountdown.textContent = `Fermeture dans ${remaining}s`;
+  const tick = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      ipCountdown.textContent = `Fermeture dans ${remaining}s`;
+    } else {
+      clearInterval(tick);
+    }
+  }, 1000);
+  _ipTimer = setTimeout(() => { clearInterval(tick); hideIpOverlay(); }, 30000);
+}
+
+function hideIpOverlay() {
+  clearTimeout(_ipTimer);
+  _ipTimer = null;
+  ipOverlay.classList.remove('visible');
+  ipOverlay.onclick = null;
+  ipCountdown.textContent = '';
+}
+
+/* ── Poll de l'état serveur ──────────────────────── */
+async function pollState() {
+  try {
+    const resp = await fetch('/api/kiosk/state');
+    if (!resp.ok) return;
+    const state = await resp.json();
+
+    // L'UI a demandé "Afficher IP"
+    if (state.show_ip) {
+      showIpOverlay();
+      return;
+    }
+
+    // L'UI a demandé "suivant"
+    if (state.next) {
+      advance();
+      return;
+    }
+
+    // La playlist a changé (upload, config, restart, etc.)
+    if (state.generation !== _state.generation) {
+      loadPlaylist(state, false);
+      return;
+    }
+
+    // Mettre à jour silencieusement la config (durées, rotation…)
+    _state.config = state.config;
+    applyRotation(state.config.rotation);
+
+  } catch (e) {
+    // Flask temporairement indisponible — on attend
+  }
+}
+
+/* ── Démarrage ───────────────────────────────────── */
+async function init() {
+  try {
+    const resp = await fetch('/api/kiosk/state');
+    if (resp.ok) {
+      const state = await resp.json();
+      loadPlaylist(state, false);
+    } else {
+      showWelcome();
+    }
+  } catch (e) {
+    showWelcome();
+    // Réessayer dans 3 s si Flask n'est pas encore prêt
+    setTimeout(init, 3000);
+    return;
+  }
+  setInterval(pollState, POLL_INTERVAL_MS);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('resize', () => applyRotation(_state.config.rotation));
+</script>
+</body>
+</html>

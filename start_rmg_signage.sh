@@ -11,18 +11,18 @@ log() {
 
 log "=== Demarrage du service rmg_signage ==="
 
-log "USER=$USER | HOME=$HOME | PORT=$FLASK_PORT"
+# Chromium kiosk requiert un serveur X sur :0
+# On exporte DISPLAY pour que upload.py puisse le passer à Chromium au démarrage.
+export DISPLAY="${DISPLAY:-:0}"
+log "USER=$USER | HOME=$HOME | PORT=$FLASK_PORT | DISPLAY=$DISPLAY"
 
-# Dossier des medias (cree ici en dernier recours, normalement fait par le service ExecStartPre)
 MEDIA_DIR="${RMG_SIGNAGE_MEDIA_DIR:-/home/rmg/signage/medias}"
 mkdir -p "$MEDIA_DIR"
 log "Dossier media : $MEDIA_DIR"
 
-# Repertoire et script Python
 SCRIPT_DIR="${RMG_SIGNAGE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 SCRIPT_PATH="$SCRIPT_DIR/upload.py"
 
-# Activation du virtualenv si present
 VENV_DIR="$SCRIPT_DIR/venv"
 if [ -f "$VENV_DIR/bin/activate" ]; then
   # shellcheck disable=SC1090
@@ -35,10 +35,8 @@ cd "$SCRIPT_DIR"
 python3 "$SCRIPT_PATH" >> "$LOG_FILE" 2>&1 &
 PY_PID=$!
 
-# Signal de readiness pour splash_helper.sh.
-# On attend que Flask soit reellement en ecoute sur le bon port (pas juste un sleep fixe)
-# afin que le splash soit visible assez longtemps et que le device DRM soit libere
-# AVANT que le mpv principal prenne la main.
+# Attendre que Flask soit en ecoute avant de signaler "ready"
+# (splash_helper.sh attend ce fichier pour tuer le splash et liberer le DRM)
 log "Attente de Flask sur :${FLASK_PORT} (max 30s)..."
 FLASK_READY=0
 for _i in $(seq 1 30); do

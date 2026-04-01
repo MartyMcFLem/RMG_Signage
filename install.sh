@@ -3,7 +3,7 @@ set -e
 # RMG Signage — Installateur unifié pour Raspberry Pi OS Lite
 # Usage: sudo bash install.sh [--user <username>] [--media-dir <path>]
 #                             [--branch <branch>] [--port <port>]
-#                             [--service-name <name>]
+#                             [--service-name <name>] [--media-quota <MB>]
 #
 # Ce script doit être lancé depuis un clone du repo :
 #   git clone https://github.com/MartyMcFLem/RMG_Signage.git
@@ -23,6 +23,7 @@ SERVICE_USER="${RMG_USER:-rmg}"
 SERVICE_NAME="rmg_signage"
 BRANCH="main"
 PORT=5000
+MEDIA_QUOTA_MB=""
 
 # ─── Lecture des arguments
 while [[ $# -gt 0 ]]; do
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --branch)       BRANCH="$2"; shift 2 ;;
     --port)         PORT="$2"; shift 2 ;;
     --service-name) SERVICE_NAME="$2"; shift 2 ;;
+    --media-quota)  MEDIA_QUOTA_MB="$2"; shift 2 ;;
     *) echo "Argument inconnu: $1"; exit 1 ;;
   esac
 done
@@ -39,6 +41,9 @@ done
 MEDIA_DIR="${MEDIA_DIR_ARG:-/home/$SERVICE_USER/signage/medias}"
 VENV_DIR="$PROJECT_DIR/venv"
 LOG_FILE="/home/$SERVICE_USER/${SERVICE_NAME}.log"
+LICENSE_DIR="/etc/rmg_signage"
+LICENSE_FILE="$LICENSE_DIR/license.json"
+MEDIA_IMG="/var/lib/rmg_signage/media.img"
 
 # ─── Vérification des droits root
 if [ "$EUID" -ne 0 ]; then
@@ -59,14 +64,15 @@ echo "======================================================"
 echo ""
 
 # ─── 1. Paquets système
-echo "[1/6] Installation des paquets système..."
+echo "[1/8] Installation des paquets système..."
 apt-get update -qq
-apt-get install -y git chromium-browser python3-venv python3-pip fonts-dejavu-core fbi
-  # chromium-browser : lecteur d'affichage kiosk (remplace mpv)
-  # fbi             : affichage du splash screen sur le framebuffer
+apt-get install -y git chromium python3-venv python3-pip fonts-dejavu-core \
+  xserver-xorg x11-xserver-utils xinit openbox
+# fbida (outil fbi pour le splash framebuffer) -- optionnel, non critique
+apt-get install -y fbida 2>/dev/null || true
 
 # ─── 2. Utilisateur et groupes
-echo "[2/6] Configuration de l'utilisateur '$SERVICE_USER'..."
+echo "[2/8] Configuration de l'utilisateur '$SERVICE_USER'..."
 if ! id "$SERVICE_USER" &>/dev/null; then
   useradd -m -s /bin/bash "$SERVICE_USER"
   echo "  → Utilisateur '$SERVICE_USER' créé"
@@ -74,17 +80,15 @@ fi
 usermod -aG video,render,input,tty "$SERVICE_USER" 2>/dev/null || true
 
 # ─── 2b. Génération du numéro de série et configuration du hostname
-echo "[2b/6] Génération du numéro de série..."
+echo "[2b/8] Génération du numéro de série..."
 
 _generate_serial_suffix() {
-  # Méthode 1 : CPU serial du Raspberry Pi complet (chars [10:26], 16 chars hex)
   local serial
   serial=$(grep -m1 "^Serial" /proc/cpuinfo 2>/dev/null | cut -c11-26 | tr -cd '0-9a-f')
   if [ ${#serial} -eq 16 ]; then
     echo "$serial"
     return
   fi
-  # Méthode 2 : UUID aléatoire (persisté dans /etc/rmg_serial)
   local serial_file="/etc/rmg_serial"
   if [ -f "$serial_file" ] && [ "$(wc -c < "$serial_file")" -ge 16 ]; then
     head -c 16 "$serial_file"
@@ -104,7 +108,6 @@ CURRENT_HOSTNAME=$(hostname 2>/dev/null || echo "")
 
 if [ "$CURRENT_HOSTNAME" != "$NEW_HOSTNAME" ]; then
   hostnamectl set-hostname "$NEW_HOSTNAME" 2>/dev/null || hostname "$NEW_HOSTNAME" || true
-  # Mettre à jour /etc/hosts
   if grep -q "127.0.1.1" /etc/hosts 2>/dev/null; then
     sed -i "s/127\.0\.1\.1.*/127.0.1.1\t$NEW_HOSTNAME/" /etc/hosts
   else
@@ -115,7 +118,7 @@ else
   echo "  → Hostname déjà correct : $NEW_HOSTNAME"
 fi
 
-# Autoriser le service a corriger le hostname et redemarrer le service
+# Autoriser le service à corriger le hostname et redémarrer
 rm -f /etc/sudoers.d/rmg_hostname 2>/dev/null || true
 HOSTNAMECTL_PATH=$(command -v hostnamectl 2>/dev/null || echo "/usr/bin/hostnamectl")
 SYSTEMCTL_PATH=$(command -v systemctl 2>/dev/null || echo "/usr/bin/systemctl")
@@ -125,16 +128,132 @@ $SERVICE_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL_PATH restart $SERVICE_NAME
 SUDOEOF
 chmod 440 /etc/sudoers.d/rmg_signage
 
-# ─── 3. Dossiers et permissions
-echo "[3/6] Création des dossiers..."
+# ─── 3. Licence et partition média
+echo "[3/8] Configuration du stockage média..."
+mkdir -p "$LICENSE_DIR"
+mkdir -p "$(dirname "$MEDIA_IMG")"
 mkdir -p "$MEDIA_DIR"
+
+# Déterminer le quota média
+# Stratégie : réserver 10 Go (10240 MB) pour l'OS, le reste pour les médias.
+# Le quota final est le minimum entre (espace dispo - 10 Go) et le quota licence.
+OS_RESERVED_MB=10240  # 10 Go réservés pour l'OS
+
+# Calculer l'espace disque total de la partition racine
+ROOT_TOTAL_MB=$(df -BM / --output=size | tail -1 | tr -d ' M')
+ROOT_AVAIL_FOR_MEDIA=$((ROOT_TOTAL_MB - OS_RESERVED_MB))
+if [ "$ROOT_AVAIL_FOR_MEDIA" -lt 512 ]; then
+  ROOT_AVAIL_FOR_MEDIA=512  # minimum 512 MB même sur petit disque
+fi
+echo "  → Disque racine : ${ROOT_TOTAL_MB} MB total, ${OS_RESERVED_MB} MB réservés OS"
+echo "  → Espace max pour médias : ${ROOT_AVAIL_FOR_MEDIA} MB"
+
+# Priorité quota : --media-quota > licence existante > calcul auto
+DEFAULT_QUOTA_MB="$ROOT_AVAIL_FOR_MEDIA"
+if [ -n "$MEDIA_QUOTA_MB" ]; then
+  QUOTA_MB="$MEDIA_QUOTA_MB"
+elif [ -f "$LICENSE_FILE" ]; then
+  LICENSE_QUOTA=$(python3 -c "import json; print(json.load(open('$LICENSE_FILE')).get('media_quota_mb', 0))" 2>/dev/null || echo "0")
+  if [ "$LICENSE_QUOTA" -gt 0 ] 2>/dev/null; then
+    QUOTA_MB="$LICENSE_QUOTA"
+  else
+    QUOTA_MB="$DEFAULT_QUOTA_MB"
+  fi
+else
+  QUOTA_MB="$DEFAULT_QUOTA_MB"
+fi
+
+# Plafonner au maximum physique disponible
+if [ "$QUOTA_MB" -gt "$ROOT_AVAIL_FOR_MEDIA" ]; then
+  echo "  ⚠️  Quota demandé (${QUOTA_MB} MB) dépasse l'espace disponible, plafonné à ${ROOT_AVAIL_FOR_MEDIA} MB"
+  QUOTA_MB="$ROOT_AVAIL_FOR_MEDIA"
+fi
+
+# Valider que le quota est un nombre > 0
+if ! [[ "$QUOTA_MB" =~ ^[0-9]+$ ]] || [ "$QUOTA_MB" -lt 64 ]; then
+  echo "  ⚠️  Quota invalide ($QUOTA_MB MB), utilisation de 4096 MB"
+  QUOTA_MB=4096
+fi
+
+# Créer/mettre à jour le fichier de licence
+if [ -f "$LICENSE_FILE" ]; then
+  # Mettre à jour seulement le quota si --media-quota a été passé
+  if [ -n "$MEDIA_QUOTA_MB" ]; then
+    python3 -c "
+import json
+try:
+    with open('$LICENSE_FILE', 'r') as f:
+        lic = json.load(f)
+except:
+    lic = {}
+lic['media_quota_mb'] = $QUOTA_MB
+with open('$LICENSE_FILE', 'w') as f:
+    json.dump(lic, f, indent=2)
+" 2>/dev/null
+  fi
+else
+  cat > "$LICENSE_FILE" << LICEOF
+{
+  "tier": "standard",
+  "media_quota_mb": $QUOTA_MB,
+  "created": "$(date -Iseconds)"
+}
+LICEOF
+fi
+chmod 644 "$LICENSE_FILE"
+echo "  → Licence : $LICENSE_FILE (quota média : ${QUOTA_MB} MB)"
+
+# Créer l'image disque si elle n'existe pas
+if [ ! -f "$MEDIA_IMG" ]; then
+  echo "  → Création de l'image disque média (${QUOTA_MB} MB)..."
+  # Utiliser fallocate (rapide) si disponible, sinon dd
+  if command -v fallocate &>/dev/null; then
+    fallocate -l "${QUOTA_MB}M" "$MEDIA_IMG"
+  else
+    dd if=/dev/zero of="$MEDIA_IMG" bs=1M count="$QUOTA_MB" status=progress
+  fi
+  mkfs.ext4 -q -F -L rmg_media "$MEDIA_IMG"
+  echo "  → Image formatée (ext4, label=rmg_media)"
+else
+  # L'image existe déjà — vérifier si un redimensionnement est nécessaire
+  CURRENT_SIZE_MB=$(du -m "$MEDIA_IMG" | cut -f1)
+  if [ "$CURRENT_SIZE_MB" -ne "$QUOTA_MB" ]; then
+    echo "  → Image existante (${CURRENT_SIZE_MB} MB) différente du quota (${QUOTA_MB} MB)"
+    echo "    Utilisez resize_media.sh pour redimensionner :"
+    echo "    sudo bash $PROJECT_DIR/resize_media.sh"
+  else
+    echo "  → Image disque existante (${QUOTA_MB} MB) — OK"
+  fi
+fi
+
+# Monter l'image si pas déjà montée
+if ! mountpoint -q "$MEDIA_DIR" 2>/dev/null; then
+  mount -o loop,noatime "$MEDIA_IMG" "$MEDIA_DIR"
+  echo "  → Image montée sur $MEDIA_DIR"
+else
+  echo "  → $MEDIA_DIR déjà monté"
+fi
+
+# Ajouter à fstab si pas déjà présent
+FSTAB_LINE="$MEDIA_IMG $MEDIA_DIR ext4 loop,noatime,nofail 0 2"
+if ! grep -qF "$MEDIA_IMG" /etc/fstab 2>/dev/null; then
+  echo "" >> /etc/fstab
+  echo "# RMG Signage — partition média" >> /etc/fstab
+  echo "$FSTAB_LINE" >> /etc/fstab
+  echo "  → Entrée fstab ajoutée"
+else
+  echo "  → Entrée fstab déjà présente"
+fi
+
+# ─── 4. Dossiers et permissions
+echo "[4/8] Création des dossiers..."
 mkdir -p /run/rmg_signage
 chown -R "$SERVICE_USER:$SERVICE_USER" "$PROJECT_DIR" "$MEDIA_DIR"
 chown "$SERVICE_USER:$SERVICE_USER" /run/rmg_signage
 chmod +x "$PROJECT_DIR"/*.sh 2>/dev/null || true
 
-# ─── 4. Virtualenv Python
-echo "[4/6] Mise en place du virtualenv Python..."
+# ─── 5. Virtualenv Python
+echo "[5/8] Mise en place du virtualenv Python..."
 if [ ! -d "$VENV_DIR" ]; then
   python3 -m venv "$VENV_DIR"
 fi
@@ -144,8 +263,8 @@ if [ -f "$PROJECT_DIR/requirements.txt" ]; then
 fi
 chown -R "$SERVICE_USER:$SERVICE_USER" "$VENV_DIR"
 
-# ─── 5. Boot silencieux
-echo "[5/6] Configuration du boot silencieux..."
+# ─── 6. Boot silencieux
+echo "[6/8] Configuration du boot silencieux..."
 CONFIG_FILE=""
 CMDLINE_FILE=""
 for BOOT_DIR in /boot/firmware /boot; do
@@ -162,9 +281,7 @@ if [ -n "$CONFIG_FILE" ]; then
   fi
   if [ -f "$CMDLINE_FILE" ] && ! grep -q "quiet" "$CMDLINE_FILE"; then
     cp "$CMDLINE_FILE" "$CMDLINE_FILE.bak"
-    # Redirectionner les messages boot vers tty3 (écran vide pour l'utilisateur)
     sed -i 's/console=tty1/console=tty3/g' "$CMDLINE_FILE"
-    # Masquer les messages kernel, le logo et le curseur clignotant
     sed -i 's/$/ quiet loglevel=3 logo.nologo vt.global_cursor_default=0 rd.systemd.show_status=false/' "$CMDLINE_FILE"
   fi
   echo "  → Boot silencieux configuré ($CONFIG_FILE)"
@@ -172,13 +289,24 @@ else
   echo "  ⚠️  /boot/config.txt introuvable — boot silencieux non appliqué (normal hors Pi)"
 fi
 
-# ─── 6. Service systemd (généré dynamiquement avec les chemins réels)
-echo "[6/6] Déploiement du service systemd..."
+# Nettoyer Plymouth s'il était installé précédemment
+if [ -d "/usr/share/plymouth/themes/rmg-signage" ]; then
+  rm -rf "/usr/share/plymouth/themes/rmg-signage"
+  echo "  → Ancien thème Plymouth supprimé"
+fi
+# Retirer les flags Plymouth de cmdline.txt si présents
+if [ -f "$CMDLINE_FILE" ]; then
+  sed -i 's/ splash//g; s/ plymouth.ignore-serial-consoles//g' "$CMDLINE_FILE"
+fi
+
+# ─── 7. Service systemd (généré dynamiquement avec les chemins réels)
+echo "[7/8] Déploiement du service systemd..."
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
 [Unit]
-Description=RMG Signage - Flask & Chromium (${BRANCH})
-After=network.target
+Description=RMG Signage - Flask & Chromium Kiosk (${BRANCH})
+After=network.target local-fs.target
 Wants=network.target
+RequiresMountsFor=$MEDIA_DIR
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
@@ -195,6 +323,9 @@ Environment=RMG_SIGNAGE_LOG=$LOG_FILE
 Environment=RMG_SIGNAGE_BRANCH=$BRANCH
 Environment=RMG_SIGNAGE_PORT=$PORT
 Environment=RMG_SIGNAGE_SERVICE=$SERVICE_NAME
+Environment=RMG_SIGNAGE_LICENSE=$LICENSE_FILE
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/$SERVICE_USER/.Xauthority
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStartPre=/bin/bash -c 'mkdir -p \$RMG_SIGNAGE_MEDIA_DIR'
 ExecStartPre=+/bin/bash $PROJECT_DIR/splash_helper.sh start
@@ -212,7 +343,59 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
+systemctl unmask getty@tty1 2>/dev/null || true  # Chromium a besoin du TTY pour X
 systemctl enable "${SERVICE_NAME}.service"
+
+# ─── 7b. Configuration X11 / autologin pour Chromium kiosk
+echo "[7b/8] Configuration X11 et autologin..."
+
+# Autologin de SERVICE_USER sur tty1 (nécessaire pour que startx puisse ouvrir le display)
+AUTOLOGIN_DIR="/etc/systemd/system/getty@tty1.service.d"
+mkdir -p "$AUTOLOGIN_DIR"
+cat > "$AUTOLOGIN_DIR/autologin.conf" << AEOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $SERVICE_USER --noclear %I \$TERM
+AEOF
+
+# .xinitrc : disable screensaver/blanking, start openbox (WM minimal) en arrière-plan
+XINITRC="/home/$SERVICE_USER/.xinitrc"
+cat > "$XINITRC" << XEOF
+#!/bin/sh
+xset s off
+xset s noblank
+xset -dpms
+exec openbox-session
+XEOF
+chmod +x "$XINITRC"
+chown "$SERVICE_USER:$SERVICE_USER" "$XINITRC"
+
+# .bash_profile : si session interactive sur tty1 et pas de DISPLAY, lancer startx
+BASH_PROFILE="/home/$SERVICE_USER/.bash_profile"
+if ! grep -q "startx" "$BASH_PROFILE" 2>/dev/null; then
+  cat >> "$BASH_PROFILE" << BEOF
+
+# RMG Signage — démarrer X automatiquement sur tty1
+if [ -z "\$DISPLAY" ] && [ "\$(tty)" = "/dev/tty1" ]; then
+  exec startx -- -nocursor 2>/dev/null
+fi
+BEOF
+  chown "$SERVICE_USER:$SERVICE_USER" "$BASH_PROFILE"
+fi
+echo "  → X11 autologin configuré pour $SERVICE_USER"
+
+# ─── 8. Vérification et résumé
+echo "[8/8] Vérification finale..."
+
+# Vérifier que le montage fonctionne
+if mountpoint -q "$MEDIA_DIR" 2>/dev/null; then
+  MEDIA_USED=$(df -BM "$MEDIA_DIR" --output=used | tail -1 | tr -d ' M')
+  MEDIA_AVAIL=$(df -BM "$MEDIA_DIR" --output=avail | tail -1 | tr -d ' M')
+  echo "  → Partition média OK : ${MEDIA_USED} MB utilisés, ${MEDIA_AVAIL} MB disponibles sur ${QUOTA_MB} MB"
+else
+  echo "  ⚠️  Partition média non montée — vérifiez manuellement"
+fi
+
 systemctl restart "${SERVICE_NAME}.service" || true
 
 echo ""
@@ -221,11 +404,15 @@ echo "  ✅ Installation terminée !"
 echo "======================================================"
 echo ""
 echo "  Projet    : $PROJECT_DIR"
-echo "  Médias    : $MEDIA_DIR"
+echo "  Médias    : $MEDIA_DIR (partition dédiée ${QUOTA_MB} MB)"
+echo "  Licence   : $LICENSE_FILE"
 echo "  Logs app  : $LOG_FILE"
 echo "  Logs svc  : sudo journalctl -u $SERVICE_NAME -f"
 echo "  Série     : $NEW_HOSTNAME"
 echo "  Interface : http://$NEW_HOSTNAME.local:$PORT  (ou via IP)"
+echo ""
+echo "  Pour changer le quota média :"
+echo "  sudo bash $PROJECT_DIR/resize_media.sh --quota <MB>"
 echo ""
 echo "  Redémarrez le Pi pour appliquer le boot silencieux :"
 echo "  sudo reboot"

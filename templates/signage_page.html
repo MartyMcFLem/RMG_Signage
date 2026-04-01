@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="google" content="notranslate">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.name }}</title>
+  <link rel="icon" type="image/png" href="/images/favicon-32x32.png">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      cursor: none;
+      font-family: 'DejaVu Sans', 'Segoe UI', Arial, sans-serif;
+    }
+    #signage-root {
+      position: relative;
+      width: 100%; height: 100%;
+    }
+    .widget {
+      position: absolute;
+      overflow: hidden;
+    }
+    /* Clock */
+    .widget-clock {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .clock-time {
+      font-weight: bold;
+      line-height: 1;
+      text-shadow: 0 2px 16px rgba(0,0,0,.5);
+      white-space: nowrap;
+    }
+    .clock-date {
+      margin-top: 8px;
+      opacity: .85;
+      white-space: nowrap;
+    }
+    /* Text */
+    .widget-text {
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      word-break: break-word;
+      text-shadow: 0 1px 8px rgba(0,0,0,.4);
+    }
+    /* Weather */
+    .widget-weather {
+      container-type: size;
+      text-shadow: 0 1px 8px rgba(0,0,0,.4);
+    }
+    .weather-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%; height: 100%;
+      padding: 3cqh 3cqw;
+      gap: 2cqh;
+      box-sizing: border-box;
+    }
+    .weather-city   { opacity: .8; white-space: nowrap; font-size: 8cqh; }
+    .weather-icon   { line-height: 1; font-size: 30cqh; }
+    .weather-temp   { font-weight: bold; line-height: 1; font-size: 28cqh; }
+    .weather-desc   { opacity: .8; white-space: nowrap; text-align: center; font-size: 7cqh; }
+    .weather-detail { opacity: .6; font-size: 6cqh; }
+
+    /* Layout horizontal : largeur > ~1.5× la hauteur */
+    @container (min-aspect-ratio: 3/2) {
+      .weather-inner {
+        flex-direction: row;
+        justify-content: center;
+        gap: 5cqw;
+        padding: 4cqh 6cqw;
+      }
+      .weather-icon {
+        font-size: 45cqh;
+        flex-shrink: 0;
+      }
+      .weather-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1cqh;
+      }
+      .weather-city  { font-size: 10cqh; }
+      .weather-temp  { font-size: 30cqh; }
+      .weather-desc  { font-size: 9cqh; text-align: left; white-space: normal; }
+      .weather-detail{ font-size: 7cqh; }
+    }
+    /* Media */
+    .widget-media {
+      background: #000;
+    }
+    .widget-media img,
+    .widget-media video {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+    }
+    /* News ticker — mode défilant */
+    .widget-ticker {
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .ticker-inner {
+      display: inline-block;
+      white-space: nowrap;
+      animation: ticker-scroll 30s linear infinite;
+    }
+    .ticker-sep { margin: 0 40px; opacity: .4; }
+    @keyframes ticker-scroll {
+      0%   { transform: translateX(100vw); }
+      100% { transform: translateX(-100%); }
+    }
+    /* News ticker — mode cartes */
+    .widget-ticker.ticker-cards {
+      display: block;
+      white-space: normal;
+      overflow: hidden;
+      padding: 0;
+      position: absolute;
+      container-type: size;
+    }
+    .ticker-card {
+      display: flex;
+      width: 100%; height: 100%;
+      align-items: stretch;
+      opacity: 0;
+      position: absolute;
+      inset: 0;
+      transition: opacity 0.6s ease;
+    }
+    .ticker-card.active { opacity: 1; }
+    .ticker-card-img {
+      flex: 0 0 55%;
+      width: 55%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .ticker-card-img.no-image { display: none; }
+    .ticker-card-text {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 4cqh 3cqw;
+      overflow: hidden;
+      font-size: 3.5cqh;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .ticker-card-text-inner {
+      max-height: 100%;
+      overflow: hidden;
+    }
+    .ticker-card-text.no-image {
+      font-size: 5cqh;
+      text-align: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="signage-root"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   RMG Signage — Signage Page Renderer
+   Page config injected by Flask via Jinja2 tojson.
+   ═══════════════════════════════════════════════════ */
+const PAGE = {{ page | tojson }};
+
+const WMO = {
+  0: ['Ciel dégagé','☀️'], 1: ['Principalement dégagé','🌤️'],
+  2: ['Partiellement nuageux','⛅'], 3: ['Couvert','☁️'],
+  45: ['Brouillard','🌫️'], 48: ['Brouillard givrant','🌫️'],
+  51: ['Bruine légère','🌦️'], 53: ['Bruine','🌦️'], 55: ['Bruine dense','🌦️'],
+  61: ['Pluie légère','🌧️'], 63: ['Pluie','🌧️'], 65: ['Pluie forte','🌧️'],
+  71: ['Neige légère','❄️'], 73: ['Neige','❄️'], 75: ['Neige forte','❄️'],
+  77: ['Grésil','🌨️'],
+  80: ['Averses légères','🌦️'], 81: ['Averses','⛈️'], 82: ['Averses fortes','⛈️'],
+  85: ['Averses de neige','❄️'], 86: ['Averses de neige fortes','❄️'],
+  95: ['Orage','⛈️'], 96: ['Orage + grêle','⛈️'], 99: ['Orage violent','⛈️'],
+};
+
+const DAYS_FR   = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+const MONTHS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+
+function formatTimeFR(d) {
+  const h = String(d.getHours()).padStart(2,'0');
+  const m = String(d.getMinutes()).padStart(2,'0');
+  const s = String(d.getSeconds()).padStart(2,'0');
+  return {h, m, s};
+}
+function formatDateFR(d) {
+  return DAYS_FR[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS_FR[d.getMonth()] + ' ' + d.getFullYear();
+}
+function formatDateShort(d) {
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+}
+
+/* ── DOM builders ─────────────────────────────────── */
+function makeWidget(w) {
+  const el = document.createElement('div');
+  el.id = 'w-' + w.id;
+  el.className = 'widget widget-' + w.type;
+  const bw = w.border_width || 0;
+  const bc = w.border_color || '#ffffff';
+  const br = w.border_radius || 0;
+  el.style.cssText = `left:${w.x||0}%;top:${w.y||0}%;width:${w.w||50}%;height:${w.h||30}%;`
+    + (bw ? `border:${bw}px solid ${bc};` : '')
+    + (br ? `border-radius:${br}px;` : '');
+  return el;
+}
+
+function buildClock(w) {
+  const cfg = w.config || {};
+  const el = makeWidget(w);
+  const showSec = !!cfg.show_seconds;
+  const showDate = !!cfg.show_date;
+  const color = cfg.color || '#ffffff';
+  const sz = cfg.font_size || 80;
+  const dateSz = cfg.date_font_size || Math.max(20, Math.round(sz * 0.32));
+  el.dataset.dateFormat = cfg.date_format || 'full';
+  el.innerHTML = `
+    <div class="clock-time" style="font-size:${sz}px;color:${color}" data-show-sec="${showSec}">--:--</div>
+    ${showDate ? `<div class="clock-date" style="font-size:${dateSz}px;color:${cfg.date_color||color}"></div>` : ''}`;
+  return el;
+}
+
+function buildText(w) {
+  const cfg = w.config || {};
+  const el = makeWidget(w);
+  const align = cfg.align || 'center';
+  el.style.justifyContent = align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center';
+  el.style.textAlign = align;
+  el.style.fontSize  = (cfg.font_size || 48) + 'px';
+  el.style.color     = cfg.color || '#ffffff';
+  if (cfg.bold) el.style.fontWeight = 'bold';
+  if (cfg.italic) el.style.fontStyle = 'italic';
+  el.innerHTML = cfg.text || '';
+  return el;
+}
+
+function buildWeather(w) {
+  const cfg = w.config || {};
+  const el = makeWidget(w);
+  el.style.color = cfg.color || '#ffffff';
+  el.dataset.lat  = cfg.lat  || 48.85;
+  el.dataset.lon  = cfg.lon  || 2.35;
+  el.dataset.unit = cfg.unit || 'celsius';
+  el.dataset.city = cfg.city || '';
+  el.innerHTML = `
+    <div class="weather-inner">
+      <div class="weather-icon">…</div>
+      <div class="weather-info">
+        ${cfg.city ? `<div class="weather-city">${cfg.city}</div>` : ''}
+        <div class="weather-temp">--°</div>
+        <div class="weather-desc"></div>
+        <div class="weather-detail"></div>
+      </div>
+    </div>`;
+  return el;
+}
+
+function buildMedia(w) {
+  const cfg = w.config || {};
+  const el = makeWidget(w);
+  const fit = cfg.fit || 'contain';
+  el.innerHTML = `
+    <img  class="w-mimg" style="object-fit:${fit};display:none" src="" alt="">
+    <video class="w-mvid" style="object-fit:${fit};display:none" src="" muted autoplay playsinline></video>`;
+  el.dataset.fit     = fit;
+  el.dataset.dur     = cfg.duration || 8;
+  el.dataset.srcType = cfg.source_type || 'all';
+  return el;
+}
+
+function buildTicker(w) {
+  const cfg = w.config || {};
+  const el = makeWidget(w);
+  const color = cfg.color || '#ffffff';
+  const sz = cfg.font_size || 28;
+  const bg = cfg.bg_color || 'rgba(0,0,0,0.5)';
+  const mode = cfg.display_mode || 'scroll';
+  el.dataset.url = cfg.rss_url || '';
+  el.dataset.speed = cfg.speed || 60;
+  el.dataset.duration = cfg.card_duration || 8;
+  el.dataset.mode = mode;
+  if (mode === 'cards') {
+    el.classList.add('ticker-cards');
+    el.style.cssText += `background:${bg};color:${color};`;
+    el.innerHTML = `<div class="ticker-card active"><div class="ticker-card-text"><div class="ticker-card-text-inner">Chargement...</div></div></div>`;
+  } else {
+    el.style.cssText += `background:${bg};font-size:${sz}px;color:${color};padding:0 20px;`;
+    el.innerHTML = `<div class="ticker-inner" id="ticker-${w.id}">Chargement...</div>`;
+  }
+  return el;
+}
+
+/* ── Page rotation ────────────────────────────────── */
+function applyPageRotation(rotation) {
+  const root = document.getElementById('signage-root');
+  const r = parseInt(rotation) || 0;
+  if (r === 90 || r === 270) {
+    root.style.width    = '100vh';
+    root.style.height   = '100vw';
+    root.style.position = 'absolute';
+    root.style.top      = '50%';
+    root.style.left     = '50%';
+    root.style.transform = `translate(-50%, -50%) rotate(${r}deg)`;
+  } else if (r === 180) {
+    root.style.transform = 'rotate(180deg)';
+  }
+}
+
+/* ── Render all widgets ───────────────────────────── */
+function initPage(page) {
+  const root = document.getElementById('signage-root');
+  const bg = page.bg_color || '#1a1a2e';
+  document.body.style.backgroundColor = bg;
+  root.style.backgroundColor = bg;
+  if (page.bg_image) {
+    root.style.backgroundImage = `url(${page.bg_image})`;
+    root.style.backgroundSize = 'cover';
+    root.style.backgroundPosition = 'center';
+  }
+  applyPageRotation(page.rotation || 0);
+
+  for (const w of (page.widgets || [])) {
+    let el = null;
+    if (w.type === 'background') {
+      const c = (w.config || {}).color || bg;
+      root.style.backgroundColor = c;
+      document.body.style.backgroundColor = c;
+      continue;
+    } else if (w.type === 'clock') {
+      el = buildClock(w);
+    } else if (w.type === 'text') {
+      el = buildText(w);
+    } else if (w.type === 'weather') {
+      el = buildWeather(w);
+    } else if (w.type === 'media') {
+      el = buildMedia(w);
+    } else if (w.type === 'ticker') {
+      el = buildTicker(w);
+    }
+    if (el) root.appendChild(el);
+  }
+
+  // Start dynamic content
+  updateAllClocks();
+  setInterval(updateAllClocks, 1000);
+
+  document.querySelectorAll('.widget-weather').forEach(el => {
+    loadWeather(el);
+  });
+  setInterval(() => {
+    document.querySelectorAll('.widget-weather').forEach(el => loadWeather(el));
+  }, 5 * 60 * 1000);
+
+  document.querySelectorAll('.widget-media').forEach(el => {
+    startMediaWidget(el);
+  });
+
+  document.querySelectorAll('.widget-ticker').forEach(el => {
+    loadTicker(el);
+  });
+}
+
+/* ── Clock ────────────────────────────────────────── */
+function updateAllClocks() {
+  const now = new Date();
+  const {h, m, s} = formatTimeFR(now);
+  const dateFull  = formatDateFR(now);
+  const dateShort = formatDateShort(now);
+  document.querySelectorAll('.widget-clock').forEach(el => {
+    const timeEl = el.querySelector('.clock-time');
+    const dateEl = el.querySelector('.clock-date');
+    if (timeEl) {
+      const showSec = timeEl.dataset.showSec === 'true';
+      timeEl.textContent = showSec ? `${h}:${m}:${s}` : `${h}:${m}`;
+    }
+    if (dateEl) dateEl.textContent = el.dataset.dateFormat === 'short' ? dateShort : dateFull;
+  });
+}
+
+/* ── Weather ──────────────────────────────────────── */
+async function loadWeather(el) {
+  const lat  = el.dataset.lat;
+  const lon  = el.dataset.lon;
+  const unit = el.dataset.unit || 'celsius';
+  try {
+    const resp = await fetch(`/api/weather?lat=${lat}&lon=${lon}&unit=${unit}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const cw   = data.current_weather || {};
+    const temp = Math.round(cw.temperature ?? 0);
+    const code = cw.weathercode ?? 0;
+    const [desc, icon] = WMO[code] || ['--', '?'];
+
+    // Current hour index for humidity / feelslike
+    let humidity = '', feelslike = '';
+    try {
+      const now  = new Date();
+      const hStr = String(now.getHours()).padStart(2,'0');
+      const times = (data.hourly || {}).time || [];
+      const idx   = times.findIndex(t => t && t.includes('T' + hStr + ':'));
+      if (idx >= 0) {
+        const rh = ((data.hourly || {}).relativehumidity_2m || [])[idx];
+        const fl = ((data.hourly || {}).apparent_temperature || [])[idx];
+        if (rh  !== undefined) humidity  = `💧 ${Math.round(rh)} %`;
+        if (fl  !== undefined) feelslike = `Ressenti ${Math.round(fl)}°`;
+      }
+    } catch (_) {}
+
+    const sym = unit === 'fahrenheit' ? '°F' : '°C';
+    el.querySelector('.weather-icon').textContent = icon;
+    el.querySelector('.weather-temp').textContent = `${temp}${sym}`;
+    el.querySelector('.weather-desc').textContent = desc;
+    el.querySelector('.weather-detail').textContent = [feelslike, humidity].filter(Boolean).join('  ');
+  } catch (e) {
+    const iconEl = el.querySelector('.weather-icon');
+    if (iconEl) iconEl.textContent = '?';
+  }
+}
+
+/* ── Media widget ─────────────────────────────────── */
+async function getFilesForWidget(el) {
+  const srcType = el.dataset.srcType || 'all';
+  try {
+    if (srcType.startsWith('pl:')) {
+      const plId = srcType.slice(3);
+      const resp = await fetch('/api/playlists/' + plId);
+      if (!resp.ok) throw new Error('playlist 404');
+      const pl = await resp.json();
+      return pl.files || [];
+    }
+    if (srcType.startsWith('file:')) {
+      const filename = srcType.slice(5);
+      return filename ? [filename] : [];
+    }
+    // default: all files
+    const resp = await fetch('/api/files');
+    return resp.ok ? await resp.json() : [];
+  } catch (_) { return []; }
+}
+
+function startMediaWidget(el) {
+  const imgEl = el.querySelector('.w-mimg');
+  const vidEl = el.querySelector('.w-mvid');
+  if (!imgEl || !vidEl) return;
+  const dur = parseFloat(el.dataset.dur || 8) * 1000;
+  const VIDEO_RE = /\.(mp4|avi|mkv|mov|webm|m4v)$/i;
+
+  let files = [];
+  let idx = 0;
+
+  function showNext() {
+    if (!files.length) return;
+    const file = files[idx];
+    idx = (idx + 1) % files.length;
+    const url = '/media/' + encodeURIComponent(file);
+    if (VIDEO_RE.test(file)) {
+      imgEl.style.display = 'none';
+      vidEl.src = url;
+      vidEl.style.display = 'block';
+      vidEl.load();
+      vidEl.play().catch(() => {});
+      vidEl.onended = showNext;
+      vidEl.onerror = () => setTimeout(showNext, 1000);
+    } else {
+      vidEl.style.display = 'none';
+      vidEl.pause();
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+      imgEl.onerror = () => setTimeout(showNext, 1000);
+      setTimeout(showNext, dur);
+    }
+  }
+
+  getFilesForWidget(el).then(f => {
+    files = f;
+    if (files.length) showNext();
+  });
+}
+
+/* ── News Ticker ─────────────────────────────────── */
+async function loadTicker(el) {
+  const url = el.dataset.url;
+  const mode = el.dataset.mode || 'scroll';
+  if (!url) {
+    const fb = mode === 'cards' ? el.querySelector('.ticker-card-text') : el.querySelector('.ticker-inner');
+    if (fb) fb.textContent = 'Configurez une URL RSS dans les paramètres de ce widget.';
+    return;
+  }
+  try {
+    const resp = await fetch('/api/rss-proxy?url=' + encodeURIComponent(url));
+    const data = await resp.json();
+    if (!resp.ok) throw new Error((data.error || ('HTTP ' + resp.status)));
+    const items = (data.items || []).filter(i => i.title);
+    if (!items.length) {
+      const fb = mode === 'cards' ? el.querySelector('.ticker-card-text') : el.querySelector('.ticker-inner');
+      if (fb) fb.textContent = 'Aucune actualité disponible.';
+      return;
+    }
+
+    if (mode === 'cards') {
+      // Construire les cartes
+      el.innerHTML = items.map((item, i) => `
+        <div class="ticker-card${i === 0 ? ' active' : ''}">
+          ${item.image ? `<img class="ticker-card-img" src="${item.image}" alt="" onerror="this.classList.add('no-image')">` : ''}
+          <div class="ticker-card-text${!item.image ? ' no-image' : ''}">
+            <div class="ticker-card-text-inner">${item.title}</div>
+          </div>
+        </div>`).join('');
+      // Rotation automatique
+      const dur = (parseFloat(el.dataset.duration) || 8) * 1000;
+      let idx = 0;
+      const cards = el.querySelectorAll('.ticker-card');
+      el._tickerInterval = setInterval(() => {
+        cards[idx].classList.remove('active');
+        idx = (idx + 1) % cards.length;
+        cards[idx].classList.add('active');
+      }, dur);
+    } else {
+      const tickerEl = el.querySelector('.ticker-inner');
+      if (!tickerEl) return;
+      tickerEl.innerHTML = items.map(i => `<span>${i.title}</span><span class="ticker-sep">•</span>`).join('');
+      const speed = parseInt(el.dataset.speed || 60);
+      const len = tickerEl.scrollWidth;
+      const dur = Math.max(10, len / speed);
+      tickerEl.style.animationDuration = dur + 's';
+    }
+  } catch (e) {
+    console.error('[ticker] erreur chargement RSS:', e);
+    const fb = mode === 'cards' ? el.querySelector('.ticker-card-text') : el.querySelector('.ticker-inner');
+    if (fb) fb.textContent = 'Actualités indisponibles : ' + e.message;
+  }
+}
+
+/* ── Start ─────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => initPage(PAGE));
+</script>
+</body>
+</html>
