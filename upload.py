@@ -1313,8 +1313,14 @@ def rss_proxy():
 
     try:
         root = _ET.fromstring(xml_bytes)
-    except _ET.ParseError as e:
-        return jsonify({"error": "XML invalide : " + str(e)}), 502
+    except _ET.ParseError:
+        # Certains flux ont des entités HTML (&nbsp; etc.) — on tente avec lxml-like fallback
+        try:
+            import re as _re2
+            cleaned = _re2.sub(r'&(?!(amp|lt|gt|apos|quot|#\d+|#x[0-9a-fA-F]+);)', '&amp;', xml_bytes.decode('utf-8', errors='replace'))
+            root = _ET.fromstring(cleaned.encode('utf-8'))
+        except Exception as e2:
+            return jsonify({"error": "XML invalide : " + str(e2)}), 502
 
     # Namespace Atom éventuel
     ns = {"atom": "http://www.w3.org/2005/Atom"}
@@ -1355,9 +1361,12 @@ def rss_proxy():
         title_el = item.find("title")
         if title_el is not None and title_el.text:
             entry = {"title": title_el.text.strip()}
-            img = _extract_image(item)
-            if img:
-                entry["image"] = img
+            try:
+                img = _extract_image(item)
+                if img:
+                    entry["image"] = img
+            except Exception:
+                pass
             items.append(entry)
 
     # Atom : <entry><title>
@@ -1366,9 +1375,12 @@ def rss_proxy():
             title_el = entry_el.find("{http://www.w3.org/2005/Atom}title")
             if title_el is not None and title_el.text:
                 entry = {"title": title_el.text.strip()}
-                img = _extract_image(entry_el)
-                if img:
-                    entry["image"] = img
+                try:
+                    img = _extract_image(entry_el)
+                    if img:
+                        entry["image"] = img
+                except Exception:
+                    pass
                 items.append(entry)
 
     return jsonify({"items": items})

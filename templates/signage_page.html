@@ -94,6 +94,7 @@
       white-space: normal;
       overflow: hidden;
       padding: 0;
+      position: absolute; /* s'assure que les cartes enfants se positionnent bien */
     }
     .ticker-card {
       display: flex;
@@ -251,7 +252,6 @@ function buildTicker(w) {
   el.dataset.mode = mode;
   if (mode === 'cards') {
     el.classList.add('ticker-cards');
-    el.style.position = 'relative'; // pour le positionnement absolu des cartes
     el.innerHTML = `<div class="ticker-card active"><div class="ticker-card-text">Chargement...</div></div>`;
   } else {
     el.style.padding = '0 20px';
@@ -493,8 +493,9 @@ async function loadTicker(el) {
       tickerEl.style.animationDuration = dur + 's';
     }
   } catch (e) {
+    console.error('[ticker] erreur chargement RSS:', e);
     const fb = mode === 'cards' ? el.querySelector('.ticker-card-text') : el.querySelector('.ticker-inner');
-    if (fb) fb.textContent = 'Actualités indisponibles.';
+    if (fb) fb.textContent = 'Actualités indisponibles : ' + e.message;
   }
 }
 
