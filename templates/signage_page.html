@@ -50,17 +50,45 @@
     }
     /* Weather */
     .widget-weather {
+      container-type: size;
+      text-shadow: 0 1px 8px rgba(0,0,0,.4);
+    }
+    .weather-inner {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      text-shadow: 0 1px 8px rgba(0,0,0,.4);
+      width: 100%; height: 100%;
+      gap: 1.5cqh;
     }
-    .weather-city   { opacity: .8; white-space: nowrap; }
-    .weather-icon   { line-height: 1; }
-    .weather-temp   { font-weight: bold; line-height: 1; }
-    .weather-desc   { opacity: .8; white-space: nowrap; text-align: center; }
-    .weather-detail { opacity: .6; font-size: .75em; margin-top: 4px; }
+    .weather-city   { opacity: .8; white-space: nowrap; font-size: 5.5cqh; }
+    .weather-icon   { line-height: 1; font-size: 18cqh; }
+    .weather-temp   { font-weight: bold; line-height: 1; font-size: 20cqh; }
+    .weather-desc   { opacity: .8; white-space: nowrap; text-align: center; font-size: 5cqh; }
+    .weather-detail { opacity: .6; font-size: 4cqh; }
+
+    /* Layout horizontal : largeur > ~1.5× la hauteur */
+    @container (min-aspect-ratio: 3/2) {
+      .weather-inner {
+        flex-direction: row;
+        justify-content: center;
+        gap: 4cqw;
+      }
+      .weather-icon {
+        font-size: 22cqh;
+        flex-shrink: 0;
+      }
+      .weather-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.8cqh;
+      }
+      .weather-city  { font-size: 6cqh; }
+      .weather-temp  { font-size: 18cqh; }
+      .weather-desc  { font-size: 5.5cqh; text-align: left; white-space: normal; }
+      .weather-detail{ font-size: 4.5cqh; }
+    }
     /* Media */
     .widget-media {
       background: #000;
@@ -215,22 +243,21 @@ function buildText(w) {
 function buildWeather(w) {
   const cfg = w.config || {};
   const el = makeWidget(w);
-  const color = cfg.color || '#ffffff';
-  const citySz = cfg.city_font_size || 22;
-  const tempSz = cfg.temp_font_size || 72;
-  const descSz = cfg.desc_font_size || 22;
-  const iconSz = cfg.icon_font_size || 64;
-  el.style.color = color;
+  el.style.color = cfg.color || '#ffffff';
   el.dataset.lat  = cfg.lat  || 48.85;
   el.dataset.lon  = cfg.lon  || 2.35;
   el.dataset.unit = cfg.unit || 'celsius';
   el.dataset.city = cfg.city || '';
   el.innerHTML = `
-    ${cfg.city ? `<div class="weather-city" style="font-size:${citySz}px">${cfg.city}</div>` : ''}
-    <div class="weather-icon" style="font-size:${iconSz}px">…</div>
-    <div class="weather-temp" style="font-size:${tempSz}px">--°</div>
-    <div class="weather-desc" style="font-size:${descSz}px"></div>
-    <div class="weather-detail"></div>`;
+    <div class="weather-inner">
+      <div class="weather-icon">…</div>
+      <div class="weather-info">
+        ${cfg.city ? `<div class="weather-city">${cfg.city}</div>` : ''}
+        <div class="weather-temp">--°</div>
+        <div class="weather-desc"></div>
+        <div class="weather-detail"></div>
+      </div>
+    </div>`;
   return el;
 }
 

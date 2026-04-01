@@ -1015,7 +1015,7 @@ function renderWidgetProps() {
       <div id="pb-weather-coords" style="font-size:11px;color:var(--text-3);padding:2px 0 4px 90px">${hasCoords ? `📍 ${c.lat}, ${c.lon}` : 'Entrez une ville et cliquez 🔍'}</div>
       <div class="prop-row"><label>Unité</label><select onchange="_pbSetC('unit',this.value)"><option value="celsius" ${c.unit!=='fahrenheit'?'selected':''}>Celsius (°C)</option><option value="fahrenheit" ${c.unit==='fahrenheit'?'selected':''}>Fahrenheit (°F)</option></select></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
-      <div class="prop-row"><label>Taille temp px</label><input type="number" value="${c.temp_font_size||72}" min="10" max="300" onchange="_pbSetC('temp_font_size',+this.value)"></div>`;
+      <div style="font-size:11px;color:var(--text-3);padding:2px 0">Tailles et disposition automatiques selon les dimensions du widget.</div>`;
   } else if (w.type === 'media') {
     const srcType = c.source_type || 'all';
     const isFile = srcType.startsWith('file:');
