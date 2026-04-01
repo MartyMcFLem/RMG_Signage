@@ -1320,18 +1320,56 @@ def rss_proxy():
     ns = {"atom": "http://www.w3.org/2005/Atom"}
     items = []
 
+    MEDIA_NS = "http://search.yahoo.com/mrss/"
+
+    def _extract_image(item_el):
+        """Tente d'extraire une URL d'image depuis un élément <item> ou <entry>."""
+        import re as _re
+        # <media:content url="..." medium="image">
+        for mc in item_el.iter(f"{{{MEDIA_NS}}}content"):
+            url = mc.get("url", "")
+            if url and mc.get("medium", "") in ("image", ""):
+                return url
+        # <media:thumbnail url="...">
+        for mt in item_el.iter(f"{{{MEDIA_NS}}}thumbnail"):
+            url = mt.get("url", "")
+            if url:
+                return url
+        # <enclosure url="..." type="image/...">
+        enc = item_el.find("enclosure")
+        if enc is not None:
+            url = enc.get("url", "")
+            ctype = enc.get("type", "")
+            if url and ctype.startswith("image/"):
+                return url
+        # <description> contenant une balise <img src="...">
+        desc_el = item_el.find("description")
+        if desc_el is not None and desc_el.text:
+            m = _re.search(r'<img[^>]+src=["\']([^"\']+)["\']', desc_el.text, _re.I)
+            if m:
+                return m.group(1)
+        return None
+
     # RSS 2.0 : <channel><item><title>
     for item in root.iter("item"):
         title_el = item.find("title")
         if title_el is not None and title_el.text:
-            items.append({"title": title_el.text.strip()})
+            entry = {"title": title_el.text.strip()}
+            img = _extract_image(item)
+            if img:
+                entry["image"] = img
+            items.append(entry)
 
     # Atom : <entry><title>
     if not items:
-        for entry in root.iter("{http://www.w3.org/2005/Atom}entry"):
-            title_el = entry.find("{http://www.w3.org/2005/Atom}title")
+        for entry_el in root.iter("{http://www.w3.org/2005/Atom}entry"):
+            title_el = entry_el.find("{http://www.w3.org/2005/Atom}title")
             if title_el is not None and title_el.text:
-                items.append({"title": title_el.text.strip()})
+                entry = {"title": title_el.text.strip()}
+                img = _extract_image(entry_el)
+                if img:
+                    entry["image"] = img
+                items.append(entry)
 
     return jsonify({"items": items})
 

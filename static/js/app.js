@@ -879,7 +879,7 @@ function renderCanvas() {
       'border-radius:4px;display:flex;align-items:center;justify-content:center;',
       'font-size:11px;text-align:center;cursor:move;box-sizing:border-box;',
       `color:${color};`,
-      selected ? `box-shadow:0 0 0 2px ${color}66;` : '',
+      selected ? `box-shadow:0 0 0 2px ${color}66;z-index:100;` : 'z-index:1;',
     ].join('');
     el.innerHTML = `<span style="pointer-events:none;padding:4px;overflow:hidden;max-width:90%;">${labels[w.type]||w.type}</span>`;
 
@@ -903,7 +903,7 @@ function renderCanvas() {
         const h = document.createElement('div');
         h.className = 'pb-rh';
         h.style.cssText = 'position:absolute;width:9px;height:9px;' +
-          'background:#fff;border:1.5px solid #555;border-radius:2px;z-index:10;' + css;
+          'background:#fff;border:1.5px solid #555;border-radius:2px;z-index:110;' + css;
         h.addEventListener('mousedown', e => {
           e.stopPropagation();
           e.preventDefault();
@@ -1037,12 +1037,17 @@ function renderWidgetProps() {
       <div class="prop-row"><label>Ajustement</label><select onchange="_pbSetC('fit',this.value)"><option value="contain" ${c.fit!=='cover'?'selected':''}>Contain</option><option value="cover" ${c.fit==='cover'?'selected':''}>Cover</option></select></div>
       ${!isFile ? `<div class="prop-row"><label>Durée img (s)</label><input type="number" value="${c.duration||8}" min="1" max="300" onchange="_pbSetC('duration',+this.value)"></div>` : ''}`;
   } else if (w.type === 'ticker') {
+    const isCards = (c.display_mode || 'scroll') === 'cards';
     typeFields = `
       <div class="prop-row"><label>URL RSS</label><input type="url" value="${c.rss_url||''}" placeholder="https://..." onchange="_pbSetC('rss_url',this.value)" style="width:100%"></div>
+      <div class="prop-row"><label>Affichage</label><select onchange="_pbSetC('display_mode',this.value);renderWidgetProps()"><option value="scroll" ${!isCards?'selected':''}>Défilant (ticker)</option><option value="cards" ${isCards?'selected':''}>Cartes avec images</option></select></div>
       <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||28}" min="10" max="100" onchange="_pbSetC('font_size',+this.value)"></div>
       <div class="prop-row"><label>Couleur texte</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
       <div class="prop-row"><label>Couleur fond</label><input type="color" value="${_rgbaToHex(c.bg_color||'#000000')}" onchange="_pbSetC('bg_color',this.value)"></div>
-      <div class="prop-row"><label>Vitesse px/s</label><input type="number" value="${c.speed||60}" min="10" max="500" onchange="_pbSetC('speed',+this.value)"></div>`;
+      ${isCards
+        ? `<div class="prop-row"><label>Durée/carte (s)</label><input type="number" value="${c.card_duration||8}" min="2" max="60" onchange="_pbSetC('card_duration',+this.value)"></div>`
+        : `<div class="prop-row"><label>Vitesse px/s</label><input type="number" value="${c.speed||60}" min="10" max="500" onchange="_pbSetC('speed',+this.value)"></div>`
+      }`;
   }
 
   panel.innerHTML = `
