@@ -94,13 +94,13 @@
       white-space: normal;
       overflow: hidden;
       padding: 0;
-      position: absolute; /* s'assure que les cartes enfants se positionnent bien */
+      position: absolute;
+      container-type: size;
     }
     .ticker-card {
       display: flex;
       width: 100%; height: 100%;
-      align-items: center;
-      gap: 0;
+      align-items: stretch;
       opacity: 0;
       position: absolute;
       inset: 0;
@@ -108,21 +108,30 @@
     }
     .ticker-card.active { opacity: 1; }
     .ticker-card-img {
-      flex-shrink: 0;
+      flex: 0 0 55%;
+      width: 55%;
       height: 100%;
-      aspect-ratio: 16/9;
       object-fit: cover;
     }
+    .ticker-card-img.no-image { display: none; }
     .ticker-card-text {
       flex: 1;
-      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      padding: 4cqh 3cqw;
       overflow: hidden;
-      display: -webkit-box;
-      -webkit-line-clamp: 4;
-      line-clamp: 4;
-      -webkit-box-orient: vertical;
+      font-size: 3.5cqh;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .ticker-card-text-inner {
+      max-height: 100%;
       overflow: hidden;
-      line-height: 1.4;
+    }
+    .ticker-card-text.no-image {
+      font-size: 5cqh;
+      text-align: center;
+      justify-content: center;
     }
   </style>
 </head>
@@ -245,16 +254,16 @@ function buildTicker(w) {
   const sz = cfg.font_size || 28;
   const bg = cfg.bg_color || 'rgba(0,0,0,0.5)';
   const mode = cfg.display_mode || 'scroll';
-  el.style.cssText += `background:${bg};font-size:${sz}px;color:${color};`;
   el.dataset.url = cfg.rss_url || '';
   el.dataset.speed = cfg.speed || 60;
   el.dataset.duration = cfg.card_duration || 8;
   el.dataset.mode = mode;
   if (mode === 'cards') {
     el.classList.add('ticker-cards');
-    el.innerHTML = `<div class="ticker-card active"><div class="ticker-card-text">Chargement...</div></div>`;
+    el.style.cssText += `background:${bg};color:${color};`;
+    el.innerHTML = `<div class="ticker-card active"><div class="ticker-card-text"><div class="ticker-card-text-inner">Chargement...</div></div></div>`;
   } else {
-    el.style.padding = '0 20px';
+    el.style.cssText += `background:${bg};font-size:${sz}px;color:${color};padding:0 20px;`;
     el.innerHTML = `<div class="ticker-inner" id="ticker-${w.id}">Chargement...</div>`;
   }
   return el;
@@ -471,8 +480,10 @@ async function loadTicker(el) {
       // Construire les cartes
       el.innerHTML = items.map((item, i) => `
         <div class="ticker-card${i === 0 ? ' active' : ''}">
-          ${item.image ? `<img class="ticker-card-img" src="${item.image}" alt="" onerror="this.style.display='none'">` : ''}
-          <div class="ticker-card-text">${item.title}</div>
+          ${item.image ? `<img class="ticker-card-img" src="${item.image}" alt="" onerror="this.classList.add('no-image')">` : ''}
+          <div class="ticker-card-text${!item.image ? ' no-image' : ''}">
+            <div class="ticker-card-text-inner">${item.title}</div>
+          </div>
         </div>`).join('');
       // Rotation automatique
       const dur = (parseFloat(el.dataset.duration) || 8) * 1000;
