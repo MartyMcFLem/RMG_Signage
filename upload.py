@@ -691,6 +691,11 @@ def serve_media(filename):
     return send_from_directory(MEDIA_DIR, filename)
 
 
+@app.route("/images/<path:filename>")
+def serve_images(filename):
+    return send_from_directory(os.path.join(app.root_path, 'images'), filename)
+
+
 @app.route("/kiosk")
 def kiosk_page():
     """Page de lecture kiosk servie par Chromium en plein écran."""
