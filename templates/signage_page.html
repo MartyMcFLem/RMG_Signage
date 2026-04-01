@@ -458,8 +458,8 @@ async function loadTicker(el) {
   }
   try {
     const resp = await fetch('/api/rss-proxy?url=' + encodeURIComponent(url));
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
+    if (!resp.ok) throw new Error((data.error || ('HTTP ' + resp.status)));
     const items = (data.items || []).filter(i => i.title);
     if (!items.length) {
       const fb = mode === 'cards' ? el.querySelector('.ticker-card-text') : el.querySelector('.ticker-inner');
