@@ -20,12 +20,17 @@ jobs:
       - name: Determine version bump
         id: bump
         run: |
-          # Récupérer le dernier tag (défaut v0.0.0 si aucun)
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Dernier tag : $LAST_TAG"
+          # Récupérer le dernier tag (vide si aucun)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Dernier tag : ${LAST_TAG:-aucun}"
 
-          # Commits depuis le dernier tag
-          COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s")
+          # Commits depuis le dernier tag (ou tous si pas de tag)
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log HEAD --pretty=format:"%s")
+            LAST_TAG="v0.0.0"
+          else
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s")
+          fi
           echo "Commits depuis $LAST_TAG :"
           echo "$COMMITS"
 
@@ -77,9 +82,10 @@ jobs:
           NOTES+="**Type de changement :** \`${BUMP}\`\n\n"
           NOTES+="### Commits inclus\n\n"
 
+          GIT_RANGE=$( [ "$LAST_TAG" = "v0.0.0" ] && echo "HEAD" || echo "${LAST_TAG}..HEAD" )
           while IFS= read -r line; do
             NOTES+="- ${line}\n"
-          done < <(git log "${LAST_TAG}..HEAD" --pretty=format:"%s (%h)" | head -50)
+          done < <(git log "$GIT_RANGE" --pretty=format:"%s (%h)" | head -50)
 
           # Écrire dans un fichier pour éviter les problèmes d'échappement
           printf '%b' "$NOTES" > release_notes.md
