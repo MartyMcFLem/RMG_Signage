@@ -192,12 +192,14 @@ def get_storage_info():
     N'affiche que l'espace utilise par les medias (pas l'OS/systeme)."""
     license_data = _read_license()
     tier = license_data.get("tier", "none")
-    quota_mb = license_data.get("media_quota_mb", DEFAULT_MEDIA_QUOTA_MB)
 
-    # Limites de fichiers selon le tier
+    # Toujours lire quota et max_files depuis LICENSE_TIERS (pas depuis le fichier stocké)
+    # pour garantir que les valeurs affichées correspondent aux tiers actuels.
+    quota_mb = DEFAULT_MEDIA_QUOTA_MB
     max_files = DEFAULT_MAX_FILES
     for _code, tinfo in LICENSE_TIERS.items():
         if tinfo["name"] == tier:
+            quota_mb = tinfo["quota_mb"]
             max_files = tinfo["max_files"]
             break
 
@@ -609,14 +611,17 @@ def api_license():
     """Retourne les informations de licence (sans la clé complète)"""
     lic = _read_license()
     tier = lic.get("tier", "none")
+    # Toujours lire quota et max_files depuis LICENSE_TIERS pour refléter les valeurs actuelles
+    quota_mb = DEFAULT_MEDIA_QUOTA_MB
     max_files = DEFAULT_MAX_FILES
     for _code, tinfo in LICENSE_TIERS.items():
         if tinfo["name"] == tier:
+            quota_mb = tinfo["quota_mb"]
             max_files = tinfo["max_files"]
             break
     safe = {
         "tier": tier,
-        "media_quota_mb": lic.get("media_quota_mb", DEFAULT_MEDIA_QUOTA_MB),
+        "media_quota_mb": quota_mb,
         "max_files": max_files,
         "activated": lic.get("activated", None),
         "key_preview": lic.get("key_preview", None),

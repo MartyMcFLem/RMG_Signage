@@ -814,6 +814,15 @@ function deleteSelectedWidget() {
   document.getElementById('pbPropsTitle').textContent = 'Propriétés';
 }
 
+document.addEventListener('keydown', e => {
+  if (!_pbSelected) return;
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  e.preventDefault();
+  deleteSelectedWidget();
+});
+
 function selectWidget(wId) {
   _pbSelected = wId;
   renderCanvas();
