@@ -53,50 +53,146 @@
       top: 0; left: 0;
       width: 100vw; height: 100vh;
       z-index: 200;
-      background: #000;
+      background: radial-gradient(ellipse at 30% 40%, rgba(99,102,241,.18) 0%, transparent 60%),
+                  radial-gradient(ellipse at 75% 70%, rgba(139,92,246,.14) 0%, transparent 55%),
+                  linear-gradient(160deg, #06060f 0%, #090914 50%, #07070d 100%);
       align-items: center;
       justify-content: center;
-      flex-direction: column;
-      gap: 3vmin;
-      font-family: 'DejaVu Sans', sans-serif;
+      font-family: 'DejaVu Sans', Arial, sans-serif;
       color: #fff;
       text-align: center;
-      padding: 5vmin;
     }
     #ip-overlay.visible { display: flex; }
-    #ip-overlay h1 {
-      font-size: 4vmin;
-      font-weight: bold;
-      color: #aab4ff;
-      letter-spacing: 0.04em;
-      margin: 0;
+
+    /* Carte centrale */
+    #ip-overlay .ip-card {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 6vmin;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(139,92,246,.25);
+      border-radius: 2.5vmin;
+      padding: 5vmin 6vmin;
+      box-shadow: 0 0 80px rgba(99,102,241,.15), 0 0 180px rgba(139,92,246,.08);
+      max-width: 88vw;
+    }
+
+    /* Colonne gauche : texte */
+    #ip-overlay .ip-left {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2.5vmin;
+      text-align: left;
+    }
+
+    /* Logo / titre */
+    #ip-overlay .ip-brand {
+      display: flex;
+      align-items: center;
+      gap: 1.5vmin;
+    }
+    #ip-overlay .ip-brand-dot {
+      width: 1.4vmin;
+      height: 1.4vmin;
+      border-radius: 50%;
+      background: #6366f1;
+      box-shadow: 0 0 1.5vmin rgba(99,102,241,.8);
+      flex-shrink: 0;
+    }
+    #ip-overlay .ip-brand-name {
+      font-size: 2.2vmin;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: rgba(199,210,254,.7);
+    }
+
+    /* Bloc URL */
+    #ip-overlay .ip-label {
+      font-size: 1.8vmin;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: rgba(167,139,250,.6);
     }
     #ip-overlay .ip-url {
-      font-size: 6vmin;
-      font-weight: bold;
-      color: #4a9eff;
-      letter-spacing: 0.02em;
+      font-size: 5vmin;
+      font-weight: 800;
+      color: #a5b4fc;
+      letter-spacing: .03em;
+      line-height: 1.1;
     }
+
+    /* Hint */
     #ip-overlay .ip-hint {
-      font-size: 2.5vmin;
-      color: #aaa;
+      font-size: 2vmin;
+      color: rgba(255,255,255,.35);
+    }
+
+    /* Compte à rebours */
+    #ip-overlay .ip-countdown-wrap {
+      display: flex;
+      align-items: center;
+      gap: 1.2vmin;
+      margin-top: .5vmin;
+    }
+    #ip-overlay .ip-countdown-bar-track {
+      width: 18vmin;
+      height: .6vmin;
+      background: rgba(255,255,255,.1);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    #ip-overlay .ip-countdown-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      border-radius: 99px;
+      transition: width 1s linear;
+      width: 100%;
+    }
+    #ip-overlay .ip-countdown {
+      font-size: 1.8vmin;
+      color: rgba(255,255,255,.3);
+      white-space: nowrap;
+    }
+
+    /* Séparateur vertical */
+    #ip-overlay .ip-divider {
+      width: 1px;
+      align-self: stretch;
+      background: linear-gradient(to bottom, transparent, rgba(139,92,246,.3), transparent);
+      flex-shrink: 0;
+    }
+
+    /* QR code */
+    #ip-overlay .ip-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2vmin;
+      flex-shrink: 0;
     }
     #ip-overlay .qr-box {
       background: #fff;
-      padding: 2vmin;
-      border-radius: 2vmin;
+      padding: 1.5vmin;
+      border-radius: 1.5vmin;
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: 0 0 30px rgba(139,92,246,.3);
     }
     #ip-overlay .qr-box img {
-      width: 24vmin;
-      height: 24vmin;
+      width: 22vmin;
+      height: 22vmin;
       image-rendering: pixelated;
+      display: block;
     }
-    #ip-overlay .ip-countdown {
-      font-size: 2vmin;
-      color: #666;
+    #ip-overlay .qr-label {
+      font-size: 1.8vmin;
+      color: rgba(255,255,255,.3);
+      letter-spacing: .06em;
     }
   </style>
 </head>
@@ -112,13 +208,37 @@
 
   <!-- Overlay IP (affiché temporairement via l'action "Afficher IP") -->
   <div id="ip-overlay">
-    <h1>RMG Signage</h1>
-    <div class="ip-url" id="ip-display">...</div>
-    <div class="ip-hint">Scannez pour accéder à l'interface</div>
-    <div class="qr-box">
-      <img id="qr-img" src="" alt="QR Code">
+    <div class="ip-card">
+      <!-- Colonne gauche -->
+      <div class="ip-left">
+        <div class="ip-brand">
+          <div class="ip-brand-dot"></div>
+          <span class="ip-brand-name">RMG Signage</span>
+        </div>
+        <div>
+          <div class="ip-label">Adresse de l'interface</div>
+          <div class="ip-url" id="ip-display">…</div>
+        </div>
+        <div class="ip-hint">Scannez le QR code ou saisissez l'adresse dans votre navigateur</div>
+        <div class="ip-countdown-wrap">
+          <div class="ip-countdown-bar-track">
+            <div class="ip-countdown-bar" id="ip-bar"></div>
+          </div>
+          <div class="ip-countdown" id="ip-countdown"></div>
+        </div>
+      </div>
+
+      <!-- Séparateur -->
+      <div class="ip-divider"></div>
+
+      <!-- Colonne droite : QR -->
+      <div class="ip-right">
+        <div class="qr-box">
+          <img id="qr-img" src="" alt="QR Code">
+        </div>
+        <div class="qr-label">Scanner pour accéder</div>
+      </div>
     </div>
-    <div class="ip-countdown" id="ip-countdown"></div>
   </div>
 
   <!-- Iframe pour les pages de signage -->
@@ -169,18 +289,22 @@ const ipOverlay  = document.getElementById('ip-overlay');
 const ipDisplay  = document.getElementById('ip-display');
 const qrImg      = document.getElementById('qr-img');
 const ipCountdown = document.getElementById('ip-countdown');
+const ipBar      = document.getElementById('ip-bar');
 const signageEl  = document.getElementById('signage-iframe');
 
 /* ── Rotation ────────────────────────────────────── */
 function applyRotation(deg) {
   const d = parseInt(deg) || 0;
+  let t;
   if (d === 90 || d === 270) {
     const vw = window.innerWidth, vh = window.innerHeight;
     const scale = Math.min(vw / vh, vh / vw);
-    container.style.transform = `rotate(${d}deg) scale(${scale})`;
+    t = `rotate(${d}deg) scale(${scale})`;
   } else {
-    container.style.transform = `rotate(${d}deg)`;
+    t = `rotate(${d}deg)`;
   }
+  container.style.transform = t;
+  ipOverlay.style.transform = t;
 }
 
 /* ── Helpers ─────────────────────────────────────── */
@@ -370,18 +494,21 @@ async function showIpOverlay() {
   // Fermer sur clic/tap
   ipOverlay.onclick = hideIpOverlay;
 
-  // Auto-fermeture après 30 s avec compte à rebours
-  let remaining = 30;
-  ipCountdown.textContent = `Fermeture dans ${remaining}s`;
+  // Auto-fermeture après 30 s avec compte à rebours + barre
+  const TOTAL = 30;
+  let remaining = TOTAL;
+  ipCountdown.textContent = `${remaining}s`;
+  ipBar.style.width = '100%';
   const tick = setInterval(() => {
     remaining--;
     if (remaining > 0) {
-      ipCountdown.textContent = `Fermeture dans ${remaining}s`;
+      ipCountdown.textContent = `${remaining}s`;
+      ipBar.style.width = `${(remaining / TOTAL) * 100}%`;
     } else {
       clearInterval(tick);
     }
   }, 1000);
-  _ipTimer = setTimeout(() => { clearInterval(tick); hideIpOverlay(); }, 30000);
+  _ipTimer = setTimeout(() => { clearInterval(tick); hideIpOverlay(); }, TOTAL * 1000);
 }
 
 function hideIpOverlay() {
@@ -390,6 +517,7 @@ function hideIpOverlay() {
   ipOverlay.classList.remove('visible');
   ipOverlay.onclick = null;
   ipCountdown.textContent = '';
+  ipBar.style.width = '100%';
 }
 
 /* ── Poll de l'état serveur ──────────────────────── */
