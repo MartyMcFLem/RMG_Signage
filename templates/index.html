@@ -131,9 +131,9 @@
                 <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
                 <span>Arreter</span>
               </button>
-              <button class="player-btn player-btn-wide" onclick="control('show-ip')" title="Afficher IP">
+              <button class="player-btn player-btn-wide" onclick="control('show-ip')" title="Afficher IP" style="border-color:rgba(59,130,246,.4);color:#60a5fa">
                 <svg viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                <span>Afficher IP sur ecran</span>
+                <span style="color:#60a5fa">Afficher IP sur ecran</span>
               </button>
               <button class="player-btn player-btn-wide" id="playAllBtn" style="display:none;background:#059669;border-color:#059669;color:#fff" onclick="playAll()">
                 <svg viewBox="0 0 24 24" style="stroke:#fff"><polygon points="5 3 19 12 5 21"/></svg>
@@ -192,7 +192,7 @@
         <p>Organisez vos medias en playlists</p>
       </div>
 
-      <div id="plActiveBanner" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:10px;background:linear-gradient(135deg,rgba(99,102,241,.22) 0%,rgba(139,92,246,.18) 50%,rgba(217,70,239,.14) 100%);border:1px solid rgba(139,92,246,.45);box-shadow:0 0 24px rgba(139,92,246,.15);font-size:13px;align-items:center;gap:10px;color:#ddd6fe">
+      <div id="plActiveBanner" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:10px;background:linear-gradient(135deg,rgba(34,197,94,.18) 0%,rgba(16,185,129,.12) 100%);border:1px solid rgba(34,197,94,.4);box-shadow:0 0 20px rgba(34,197,94,.15);font-size:13px;align-items:center;gap:10px;color:#86efac">
         <span class="status-dot on" style="margin:0"></span>
         <span>Playlist active : <strong id="plActiveName"></strong></span>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="deactivatePlaylist()">Lire tout</button>
@@ -241,7 +241,7 @@
         <h1>Pages</h1>
         <p>Créez des mises en page avec widgets (horloge, météo, texte, médias&hellip;)</p>
       </div>
-      <div id="pageActiveBanner" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:10px;background:linear-gradient(135deg,rgba(99,102,241,.22) 0%,rgba(139,92,246,.18) 50%,rgba(217,70,239,.14) 100%);border:1px solid rgba(139,92,246,.45);box-shadow:0 0 24px rgba(139,92,246,.15);font-size:13px;align-items:center;gap:10px;color:#ddd6fe">
+      <div id="pageActiveBanner" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:10px;background:linear-gradient(135deg,rgba(34,197,94,.18) 0%,rgba(16,185,129,.12) 100%);border:1px solid rgba(34,197,94,.4);box-shadow:0 0 20px rgba(34,197,94,.15);font-size:13px;align-items:center;gap:10px;color:#86efac">
         <span class="status-dot on" style="margin:0"></span>
         <span>Page active (lecture seule) : <strong id="pageActiveName"></strong></span>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="deactivatePage()">Reprendre la playlist</button>
