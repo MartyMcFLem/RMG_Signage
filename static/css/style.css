@@ -575,6 +575,11 @@ body {
   color: #fca5a5;
 }
 #page-dashboard .player-btn.danger:hover span { color: #fca5a5; }
+/* Afficher IP : bleu */
+#page-dashboard .player-btn.player-btn-ip { border-color: rgba(59,130,246,.4) !important; color: #60a5fa !important; }
+#page-dashboard .player-btn.player-btn-ip span { color: #60a5fa !important; }
+#page-dashboard .player-btn.player-btn-ip:hover { background: rgba(59,130,246,.18) !important; border-color: rgba(59,130,246,.65) !important; box-shadow: 0 4px 20px rgba(59,130,246,.25) !important; color: #93c5fd !important; }
+#page-dashboard .player-btn.player-btn-ip:hover span { color: #93c5fd !important; }
 #page-dashboard .dash-alert { max-width: 760px; margin: 0 auto 20px; }
 
 /* ── Page Builder ─────────────────────────────────── */
