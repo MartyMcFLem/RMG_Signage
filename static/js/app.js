@@ -115,7 +115,15 @@ async function loadDashboard() {
     if (isRunning) {
       dot.className = 'player-now-dot on';
       pLabel.textContent = 'En lecture';
-      pTitle.textContent = status.media_count + ' media' + (status.media_count > 1 ? 's' : '') + ' en rotation';
+      const npType = status.now_playing_type || 'all';
+      const npName = status.now_playing_name || '';
+      if (npType === 'page') {
+        pTitle.textContent = 'Page : ' + npName;
+      } else if (npType === 'playlist') {
+        pTitle.textContent = 'Playlist : ' + npName;
+      } else {
+        pTitle.textContent = status.media_count + ' media' + (status.media_count > 1 ? 's' : '') + ' en rotation';
+      }
     } else {
       dot.className = 'player-now-dot off';
       pLabel.textContent = 'Lecteur';
@@ -1011,13 +1019,13 @@ function renderWidgetProps() {
       <div class="prop-row"><label>Format date</label><select onchange="_pbSetC('date_format',this.value)"><option value="full" ${(!c.date_format||c.date_format==='full')?'selected':''}>Complet (Lundi 1 avril 2026)</option><option value="short" ${c.date_format==='short'?'selected':''}>Court (JJ/MM/AAAA)</option></select></div>
       <div class="prop-row"><label>Taille date px</label><input type="number" value="${c.date_font_size||28}" min="10" max="200" onchange="_pbSetC('date_font_size',+this.value)"></div>
       <div class="prop-row"><label>Couleur date</label><input type="color" value="${c.date_color||'#aaaacc'}" onchange="_pbSetC('date_color',this.value)"></div>
-      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>`;
+      <div class="prop-row"><label>Alignement</label>${_alignButtons(c.align)}</div>`;
   } else if (w.type === 'text') {
     typeFields = `
       <div class="prop-row"><label>Texte</label><textarea rows="3" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;" onchange="_pbSetC('text',this.value)">${c.text||''}</textarea></div>
       <div class="prop-row"><label>Taille px</label><input type="number" value="${c.font_size||48}" min="8" max="300" onchange="_pbSetC('font_size',+this.value)"></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
-      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>
+      <div class="prop-row"><label>Alignement</label>${_alignButtons(c.align)}</div>
       <div class="prop-row"><label>Gras</label><input type="checkbox" ${c.bold?'checked':''} onchange="_pbSetC('bold',this.checked)"></div>
       <div class="prop-row"><label>Italique</label><input type="checkbox" ${c.italic?'checked':''} onchange="_pbSetC('italic',this.checked)"></div>`;
   } else if (w.type === 'weather') {
@@ -1031,7 +1039,7 @@ function renderWidgetProps() {
       <div id="pb-weather-coords" style="font-size:11px;color:var(--text-3);padding:2px 0 4px 90px">${hasCoords ? `📍 ${c.lat}, ${c.lon}` : 'Entrez une ville et cliquez 🔍'}</div>
       <div class="prop-row"><label>Unité</label><select onchange="_pbSetC('unit',this.value)"><option value="celsius" ${c.unit!=='fahrenheit'?'selected':''}>Celsius (°C)</option><option value="fahrenheit" ${c.unit==='fahrenheit'?'selected':''}>Fahrenheit (°F)</option></select></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
-      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>
+      <div class="prop-row"><label>Alignement</label>${_alignButtons(c.align)}</div>
       <div style="font-size:11px;color:var(--text-3);padding:2px 0">Tailles et disposition automatiques selon les dimensions du widget.</div>`;
   } else if (w.type === 'media') {
     const srcType = c.source_type || 'all';
@@ -1052,6 +1060,7 @@ function renderWidgetProps() {
       <div class="prop-row"><label>Source</label><select onchange="_pbSetC('source_type',this.value);renderWidgetProps()">${plOptions}</select></div>
       ${filePicker}
       <div class="prop-row"><label>Ajustement</label><select onchange="_pbSetC('fit',this.value)"><option value="contain" ${c.fit!=='cover'?'selected':''}>Contain</option><option value="cover" ${c.fit==='cover'?'selected':''}>Cover</option></select></div>
+      <div class="prop-row"><label>Couleur fond</label><input type="color" value="${c.bg_color||'#000000'}" onchange="_pbSetC('bg_color',this.value)"></div>
       ${!isFile ? `<div class="prop-row"><label>Durée img (s)</label><input type="number" value="${c.duration||8}" min="1" max="300" onchange="_pbSetC('duration',+this.value)"></div>` : ''}`;
   } else if (w.type === 'ticker') {
     const isCards = (c.display_mode || 'scroll') === 'cards';
@@ -1065,7 +1074,7 @@ function renderWidgetProps() {
         ? `<div class="prop-row"><label>Durée/carte (s)</label><input type="number" value="${c.card_duration||8}" min="2" max="60" onchange="_pbSetC('card_duration',+this.value)"></div>`
         : `<div class="prop-row"><label>Vitesse px/s</label><input type="number" value="${c.speed||60}" min="10" max="500" onchange="_pbSetC('speed',+this.value)"></div>`
       }
-      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>`;
+      <div class="prop-row"><label>Alignement</label>${_alignButtons(c.align)}</div>`;
   }
 
   panel.innerHTML = `
@@ -1073,6 +1082,21 @@ function renderWidgetProps() {
       ${posFields}${typeFields}
       <button class="btn btn-ghost btn-sm" style="color:var(--red);margin-top:8px;" onclick="deleteSelectedWidget()">Supprimer ce widget</button>
     </div>`;
+}
+
+function _alignButtons(current) {
+  const val = current || 'center';
+  return `<div style="display:flex;gap:4px;">
+    ${[['left','≡ gauche','M3,6h10v2H3V6zm0,4h14v2H3v-2zm0,4h10v2H3v-2z'],
+       ['center','≡ centre','M3,6h18v2H3V6zm2,4h14v2H5v-2zm-2,4h18v2H3v-2z'],
+       ['right','≡ droite','M11,6h10v2H11V6zm-8,4h18v2H3v-2zm8,4h10v2H11v-2z']
+      ].map(([v, title, path]) => `<button title="${title}" onclick="_pbSetC('align','${v}');renderWidgetProps()" style="
+        width:30px;height:28px;border:1.5px solid ${val===v?'var(--accent)':'var(--border)'};
+        border-radius:5px;background:${val===v?'var(--accent)22':'var(--surface)'};
+        cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="${val===v?'var(--accent)':'var(--text-2)'}"><path d="${path}"/></svg>
+      </button>`).join('')}
+  </div>`;
 }
 
 function _pbSet(key, val) {

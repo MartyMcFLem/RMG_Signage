@@ -670,6 +670,23 @@ def get_status():
     except Exception:
         media_count = 0
     storage = get_storage_info()
+
+    # Déterminer ce qui est actuellement en lecture
+    active_page_id = config.get("active_page")
+    active_pl_id   = config.get("active_playlist")
+    now_playing_type = "all"
+    now_playing_name = None
+    if active_page_id:
+        pg = next((p for p in config.get("pages", []) if p["id"] == active_page_id), None)
+        if pg:
+            now_playing_type = "page"
+            now_playing_name = pg.get("name", "Page sans nom")
+    elif active_pl_id:
+        pl = next((p for p in config.get("playlists", []) if p.get("id") == active_pl_id), None)
+        if pl:
+            now_playing_type = "playlist"
+            now_playing_name = pl.get("name", "Playlist")
+
     return jsonify({
         "player_running": running,
         "media_count": media_count,
@@ -677,6 +694,8 @@ def get_status():
         "serial": get_device_serial(),
         "storage": storage,
         "version": get_app_version(),
+        "now_playing_type": now_playing_type,
+        "now_playing_name": now_playing_name,
     })
 
 

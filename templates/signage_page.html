@@ -282,6 +282,7 @@ function buildMedia(w) {
   const cfg = w.config || {};
   const el = makeWidget(w);
   const fit = cfg.fit || 'contain';
+  if (cfg.bg_color) el.style.backgroundColor = cfg.bg_color;
   el.innerHTML = `
     <img  class="w-mimg" style="object-fit:${fit};display:none" src="" alt="">
     <video class="w-mvid" style="object-fit:${fit};display:none" src="" muted autoplay playsinline></video>`;
