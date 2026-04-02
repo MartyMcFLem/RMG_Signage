@@ -145,15 +145,11 @@ async function loadConfig() {
   refreshNowPlaying(cfg);
 }
 function refreshNowPlaying(cfg) {
-  const playAllBtn = document.getElementById('playAllBtn');
   const pTitle = document.getElementById('playerTitle');
   const pLabel = document.getElementById('playerLabel');
   if (cfg.single_file_mode && cfg.selected_file) {
     if (pTitle) pTitle.textContent = cfg.selected_file;
     if (pLabel) pLabel.textContent = 'Fichier unique';
-    playAllBtn.style.display = 'flex';
-  } else {
-    playAllBtn.style.display = 'none';
   }
 }
 async function updateConfig() {
@@ -326,14 +322,6 @@ async function setFileDuration(filename, value) {
 async function playSingle(filename) {
   try {
     const res = await fetch('/api/play-single/'+encodeURIComponent(filename), {method:'POST'});
-    const data = await res.json();
-    showToast(data.message || 'OK');
-    loadGallery(); loadConfig(); loadDashboard();
-  } catch(e) { showToast('Erreur : ' + e.message); }
-}
-async function playAll() {
-  try {
-    const res = await fetch('/api/play-all', {method:'POST'});
     const data = await res.json();
     showToast(data.message || 'OK');
     loadGallery(); loadConfig(); loadDashboard();
