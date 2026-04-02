@@ -130,6 +130,7 @@
     }
     .ticker-card {
       display: flex;
+      flex-direction: column;
       width: 100%; height: 100%;
       align-items: stretch;
       opacity: 0;
@@ -139,9 +140,9 @@
     }
     .ticker-card.active { opacity: 1; }
     .ticker-card-img {
-      flex: 0 0 55%;
-      width: 55%;
-      height: 100%;
+      flex: 0 0 60%;
+      width: 100%;
+      height: 60%;
       object-fit: cover;
     }
     .ticker-card-img.no-image { display: none; }
@@ -149,7 +150,7 @@
       flex: 1;
       display: flex;
       align-items: center;
-      padding: 4cqh 3cqw;
+      padding: 3cqh 3cqw;
       overflow: hidden;
       font-size: 3.5cqh;
       line-height: 1.45;
