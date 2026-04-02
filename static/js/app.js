@@ -1001,7 +1001,8 @@ function renderWidgetProps() {
       <div class="prop-row"><label>Afficher date</label><input type="checkbox" ${c.show_date?'checked':''} onchange="_pbSetC('show_date',this.checked)"></div>
       <div class="prop-row"><label>Format date</label><select onchange="_pbSetC('date_format',this.value)"><option value="full" ${(!c.date_format||c.date_format==='full')?'selected':''}>Complet (Lundi 1 avril 2026)</option><option value="short" ${c.date_format==='short'?'selected':''}>Court (JJ/MM/AAAA)</option></select></div>
       <div class="prop-row"><label>Taille date px</label><input type="number" value="${c.date_font_size||28}" min="10" max="200" onchange="_pbSetC('date_font_size',+this.value)"></div>
-      <div class="prop-row"><label>Couleur date</label><input type="color" value="${c.date_color||'#aaaacc'}" onchange="_pbSetC('date_color',this.value)"></div>`;
+      <div class="prop-row"><label>Couleur date</label><input type="color" value="${c.date_color||'#aaaacc'}" onchange="_pbSetC('date_color',this.value)"></div>
+      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>`;
   } else if (w.type === 'text') {
     typeFields = `
       <div class="prop-row"><label>Texte</label><textarea rows="3" style="width:100%;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;" onchange="_pbSetC('text',this.value)">${c.text||''}</textarea></div>
@@ -1021,6 +1022,7 @@ function renderWidgetProps() {
       <div id="pb-weather-coords" style="font-size:11px;color:var(--text-3);padding:2px 0 4px 90px">${hasCoords ? `📍 ${c.lat}, ${c.lon}` : 'Entrez une ville et cliquez 🔍'}</div>
       <div class="prop-row"><label>Unité</label><select onchange="_pbSetC('unit',this.value)"><option value="celsius" ${c.unit!=='fahrenheit'?'selected':''}>Celsius (°C)</option><option value="fahrenheit" ${c.unit==='fahrenheit'?'selected':''}>Fahrenheit (°F)</option></select></div>
       <div class="prop-row"><label>Couleur</label><input type="color" value="${c.color||'#ffffff'}" onchange="_pbSetC('color',this.value)"></div>
+      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>
       <div style="font-size:11px;color:var(--text-3);padding:2px 0">Tailles et disposition automatiques selon les dimensions du widget.</div>`;
   } else if (w.type === 'media') {
     const srcType = c.source_type || 'all';
@@ -1053,7 +1055,8 @@ function renderWidgetProps() {
       ${isCards
         ? `<div class="prop-row"><label>Durée/carte (s)</label><input type="number" value="${c.card_duration||8}" min="2" max="60" onchange="_pbSetC('card_duration',+this.value)"></div>`
         : `<div class="prop-row"><label>Vitesse px/s</label><input type="number" value="${c.speed||60}" min="10" max="500" onchange="_pbSetC('speed',+this.value)"></div>`
-      }`;
+      }
+      <div class="prop-row"><label>Alignement</label><select onchange="_pbSetC('align',this.value)"><option value="left" ${c.align==='left'?'selected':''}>Gauche</option><option value="center" ${(!c.align||c.align==='center')?'selected':''}>Centre</option><option value="right" ${c.align==='right'?'selected':''}>Droite</option></select></div>`;
   }
 
   panel.innerHTML = `

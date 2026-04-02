@@ -66,7 +66,7 @@
     }
     .weather-city   { opacity: .8; white-space: nowrap; font-size: 8cqh; }
     .weather-icon   { line-height: 1; font-size: 30cqh; }
-    .weather-icon img.emoji { height: 1em; width: 1em; vertical-align: middle; }
+    .weather-icon img.emoji, .weather-detail img.emoji { height: 1em; width: 1em; vertical-align: middle; }
     .weather-temp   { font-weight: bold; line-height: 1; font-size: 28cqh; }
     .weather-desc   { opacity: .8; white-space: nowrap; text-align: center; font-size: 7cqh; }
     .weather-detail { opacity: .6; font-size: 6cqh; }
@@ -231,7 +231,10 @@ function buildClock(w) {
   const color = cfg.color || '#ffffff';
   const sz = cfg.font_size || 80;
   const dateSz = cfg.date_font_size || Math.max(20, Math.round(sz * 0.32));
+  const align = cfg.align || 'center';
   el.dataset.dateFormat = cfg.date_format || 'full';
+  el.style.alignItems = align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center';
+  el.style.textAlign = align;
   el.innerHTML = `
     <div class="clock-time" style="font-size:${sz}px;color:${color}" data-show-sec="${showSec}">--:--</div>
     ${showDate ? `<div class="clock-date" style="font-size:${dateSz}px;color:${cfg.date_color||color}"></div>` : ''}`;
@@ -256,14 +259,16 @@ function buildWeather(w) {
   const cfg = w.config || {};
   const el = makeWidget(w);
   el.style.color = cfg.color || '#ffffff';
+  const align = cfg.align || 'center';
+  const alignItems = align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center';
   el.dataset.lat  = cfg.lat  || 48.85;
   el.dataset.lon  = cfg.lon  || 2.35;
   el.dataset.unit = cfg.unit || 'celsius';
   el.dataset.city = cfg.city || '';
   el.innerHTML = `
-    <div class="weather-inner">
+    <div class="weather-inner" style="align-items:${alignItems};text-align:${align}">
       <div class="weather-icon">…</div>
-      <div class="weather-info">
+      <div class="weather-info" style="align-items:${alignItems};text-align:${align}">
         ${cfg.city ? `<div class="weather-city">${cfg.city}</div>` : ''}
         <div class="weather-temp">--°</div>
         <div class="weather-desc"></div>
@@ -293,17 +298,19 @@ function buildTicker(w) {
   const sz = cfg.font_size || 28;
   const bg = cfg.bg_color || 'rgba(0,0,0,0.5)';
   const mode = cfg.display_mode || 'scroll';
+  const align = cfg.align || 'center';
   el.dataset.url = cfg.rss_url || '';
   el.dataset.speed = cfg.speed || 60;
   el.dataset.duration = cfg.card_duration || 8;
   el.dataset.mode = mode;
+  el.dataset.align = align;
   if (mode === 'cards') {
     el.classList.add('ticker-cards');
     el.style.cssText += `background:${bg};color:${color};`;
-    el.innerHTML = `<div class="ticker-card active"><div class="ticker-card-text"><div class="ticker-card-text-inner">Chargement...</div></div></div>`;
+    el.innerHTML = `<div class="ticker-card active"><div class="ticker-card-text" style="text-align:${align};justify-content:${align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center'}"><div class="ticker-card-text-inner">Chargement...</div></div></div>`;
   } else {
-    el.style.cssText += `background:${bg};font-size:${sz}px;color:${color};padding:0 20px;`;
-    el.innerHTML = `<div class="ticker-inner" id="ticker-${w.id}">Chargement...</div>`;
+    el.style.cssText += `background:${bg};font-size:${sz}px;color:${color};padding:0 20px;justify-content:${align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center'};`;
+    el.innerHTML = `<div class="ticker-inner" id="ticker-${w.id}" style="text-align:${align}">Chargement...</div>`;
   }
   return el;
 }
@@ -430,7 +437,9 @@ async function loadWeather(el) {
     if (typeof twemoji !== 'undefined') twemoji.parse(iconEl, {folder: 'svg', ext: '.svg'});
     el.querySelector('.weather-temp').textContent = `${temp}${sym}`;
     el.querySelector('.weather-desc').textContent = desc;
-    el.querySelector('.weather-detail').textContent = [feelslike, humidity].filter(Boolean).join('  ');
+    const detailEl = el.querySelector('.weather-detail');
+    detailEl.textContent = [feelslike, humidity].filter(Boolean).join('  ');
+    if (typeof twemoji !== 'undefined') twemoji.parse(detailEl, {folder: 'svg', ext: '.svg'});
   } catch (e) {
     const iconEl = el.querySelector('.weather-icon');
     if (iconEl) iconEl.textContent = '?';
@@ -518,11 +527,13 @@ async function loadTicker(el) {
     }
 
     if (mode === 'cards') {
+      const align = el.dataset.align || 'center';
+      const justifyContent = align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center';
       // Construire les cartes
       el.innerHTML = items.map((item, i) => `
         <div class="ticker-card${i === 0 ? ' active' : ''}">
           ${item.image ? `<img class="ticker-card-img" src="${item.image}" alt="" onerror="this.classList.add('no-image')">` : ''}
-          <div class="ticker-card-text${!item.image ? ' no-image' : ''}">
+          <div class="ticker-card-text${!item.image ? ' no-image' : ''}" style="text-align:${align};justify-content:${justifyContent}">
             <div class="ticker-card-text-inner">${item.title}</div>
           </div>
         </div>`).join('');
