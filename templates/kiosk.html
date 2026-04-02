@@ -279,6 +279,7 @@ let _page_index = -1;  // -1 = phase média, ≥ 0 = index dans _pages_list
 let _timer     = null; // setTimeout pour avancer
 let _playing   = false;
 let _ipTimer   = null; // setTimeout pour masquer l'overlay IP
+let _ipStandby = false; // true = overlay affiché en mode veille (pas de timer)
 
 const imgEl     = document.getElementById('media-img');
 const videoEl   = document.getElementById('media-video');
@@ -369,14 +370,15 @@ function hideAll() {
   videoEl.pause();
   clearTimeout(_timer);
   _timer = null;
+  // Si l'overlay IP était en mode veille, on le masque car du contenu reprend
+  if (_ipStandby) hideIpOverlay();
 }
 
 function showWelcome() {
   hideAll();
-  // Essaie d'afficher l'écran de bienvenue généré par Flask (si dispo)
-  const ts = Date.now();
-  welcomeImg.src = `/media/.welcome_screen.png?t=${ts}`;
   welcomeEl.style.display = 'block';
+  // Afficher l'overlay IP en mode veille (sans countdown)
+  showIpOverlay(true);
 }
 
 function showMedia(filename) {
@@ -471,30 +473,44 @@ function loadPlaylist(state, preserveIndex) {
 }
 
 /* ── Overlay IP ──────────────────────────────────── */
-async function showIpOverlay() {
+async function showIpOverlay(permanent = false) {
   clearTimeout(_ipTimer);
-  try {
-    const resp = await fetch('/api/kiosk/ip-info');
-    if (!resp.ok) return;
-    const data = await resp.json();
-    ipDisplay.textContent = data.url || data.ip;
-    if (data.qr) {
-      qrImg.src = data.qr;
-      qrImg.style.display = 'block';
-    } else {
+  _ipStandby = permanent;
+
+  // Évite un double fetch si déjà visible en mode veille
+  if (!ipOverlay.classList.contains('visible')) {
+    try {
+      const resp = await fetch('/api/kiosk/ip-info');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      ipDisplay.textContent = data.url || data.ip;
+      if (data.qr) {
+        qrImg.src = data.qr;
+        qrImg.style.display = 'block';
+      } else {
+        qrImg.style.display = 'none';
+      }
+    } catch (e) {
+      ipDisplay.textContent = 'IP indisponible';
       qrImg.style.display = 'none';
     }
-  } catch (e) {
-    ipDisplay.textContent = 'IP indisponible';
-    qrImg.style.display = 'none';
+    ipOverlay.classList.add('visible');
   }
 
-  ipOverlay.classList.add('visible');
+  const countdownWrap = document.querySelector('.ip-countdown-wrap');
 
-  // Fermer sur clic/tap
+  if (permanent) {
+    // Mode veille : pas de timer ni de countdown
+    ipOverlay.onclick = null;
+    if (countdownWrap) countdownWrap.style.visibility = 'hidden';
+    ipCountdown.textContent = '';
+    ipBar.style.width = '100%';
+    return;
+  }
+
+  // Mode manuel : fermer sur clic + countdown 30 s
   ipOverlay.onclick = hideIpOverlay;
-
-  // Auto-fermeture après 30 s avec compte à rebours + barre
+  if (countdownWrap) countdownWrap.style.visibility = 'visible';
   const TOTAL = 30;
   let remaining = TOTAL;
   ipCountdown.textContent = `${remaining}s`;
@@ -514,10 +530,13 @@ async function showIpOverlay() {
 function hideIpOverlay() {
   clearTimeout(_ipTimer);
   _ipTimer = null;
+  _ipStandby = false;
   ipOverlay.classList.remove('visible');
   ipOverlay.onclick = null;
   ipCountdown.textContent = '';
   ipBar.style.width = '100%';
+  const countdownWrap = document.querySelector('.ip-countdown-wrap');
+  if (countdownWrap) countdownWrap.style.visibility = 'visible';
 }
 
 /* ── Poll de l'état serveur ──────────────────────── */
