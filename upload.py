@@ -1327,37 +1327,71 @@ def rss_proxy():
     if not raw_url.startswith(("http://", "https://")):
         return jsonify({"error": "URL invalide"}), 400
 
-    try:
-        import urllib.request as _urlreq
-        import http.cookiejar as _cookiejar
-        import ssl as _ssl
+    import urllib.request as _urlreq
+    import urllib.parse as _urlparse
+    import http.cookiejar as _cookiejar
+    import ssl as _ssl
 
+    def _make_opener():
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = _ssl.CERT_NONE
-
-        jar = _cookiejar.CookieJar()
-        opener = _urlreq.build_opener(
+        return _urlreq.build_opener(
             _urlreq.HTTPSHandler(context=ctx),
-            _urlreq.HTTPCookieProcessor(jar),
+            _urlreq.HTTPCookieProcessor(_cookiejar.CookieJar()),
             _urlreq.HTTPRedirectHandler(),
         )
+
+    # ── Tentative 1 : fetch direct ────────────────────────
+    xml_bytes = None
+    direct_error_code = None
+    try:
+        parsed = _urlparse.urlparse(raw_url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
         req = _urlreq.Request(raw_url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
-            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "identity",
+            "Referer": origin + "/",
             "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
         })
-        with opener.open(req, timeout=10) as resp:
+        with _make_opener().open(req, timeout=10) as resp:
             xml_bytes = resp.read()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 502
+    except _urlreq.HTTPError as e:
+        direct_error_code = e.code
+    except Exception:
+        direct_error_code = 0
 
+    # ── Tentative 2 : fallback rss2json.com (contourne Cloudflare) ──
+    if xml_bytes is None:
+        try:
+            proxy_url = "https://api.rss2json.com/v1/api.json?rss_url=" + _urlparse.quote(raw_url, safe="")
+            req2 = _urlreq.Request(proxy_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+            with _make_opener().open(req2, timeout=12) as resp2:
+                import json as _json
+                data = _json.loads(resp2.read().decode("utf-8"))
+            if data.get("status") == "ok":
+                items = []
+                for it in data.get("items", []):
+                    title = (it.get("title") or "").strip()
+                    if not title:
+                        continue
+                    entry = {"title": title}
+                    thumb = it.get("thumbnail") or it.get("enclosure", {}).get("link", "")
+                    if thumb:
+                        entry["image"] = thumb
+                    items.append(entry)
+                return jsonify({"items": items})
+            else:
+                return jsonify({"error": f"rss2json: {data.get('message', 'erreur inconnue')} (fetch direct: HTTP {direct_error_code})"}), 502
+        except Exception as e2:
+            return jsonify({"error": f"HTTP {direct_error_code} sur le flux, puis échec proxy: {e2}"}), 502
+
+    # ── Parsing XML (fetch direct réussi) ─────────────────
     try:
         root = _ET.fromstring(xml_bytes)
     except _ET.ParseError:
-        # Certains flux ont des entités HTML (&nbsp; etc.) — on tente avec lxml-like fallback
         try:
             import re as _re2
             cleaned = _re2.sub(r'&(?!(amp|lt|gt|apos|quot|#\d+|#x[0-9a-fA-F]+);)', '&amp;', xml_bytes.decode('utf-8', errors='replace'))
@@ -1365,33 +1399,23 @@ def rss_proxy():
         except Exception as e2:
             return jsonify({"error": "XML invalide : " + str(e2)}), 502
 
-    # Namespace Atom éventuel
-    ns = {"atom": "http://www.w3.org/2005/Atom"}
-    items = []
-
     MEDIA_NS = "http://search.yahoo.com/mrss/"
 
     def _extract_image(item_el):
-        """Tente d'extraire une URL d'image depuis un élément <item> ou <entry>."""
         import re as _re
-        # <media:content url="..." medium="image">
         for mc in item_el.iter(f"{{{MEDIA_NS}}}content"):
             url = mc.get("url", "")
             if url and mc.get("medium", "") in ("image", ""):
                 return url
-        # <media:thumbnail url="...">
         for mt in item_el.iter(f"{{{MEDIA_NS}}}thumbnail"):
             url = mt.get("url", "")
             if url:
                 return url
-        # <enclosure url="..." type="image/...">
         enc = item_el.find("enclosure")
         if enc is not None:
             url = enc.get("url", "")
-            ctype = enc.get("type", "")
-            if url and ctype.startswith("image/"):
+            if url and enc.get("type", "").startswith("image/"):
                 return url
-        # <description> contenant une balise <img src="...">
         desc_el = item_el.find("description")
         if desc_el is not None and desc_el.text:
             m = _re.search(r'<img[^>]+src=["\']([^"\']+)["\']', desc_el.text, _re.I)
@@ -1399,7 +1423,7 @@ def rss_proxy():
                 return m.group(1)
         return None
 
-    # RSS 2.0 : <channel><item><title>
+    items = []
     for item in root.iter("item"):
         title_el = item.find("title")
         if title_el is not None and title_el.text:
@@ -1412,7 +1436,6 @@ def rss_proxy():
                 pass
             items.append(entry)
 
-    # Atom : <entry><title>
     if not items:
         for entry_el in root.iter("{http://www.w3.org/2005/Atom}entry"):
             title_el = entry_el.find("{http://www.w3.org/2005/Atom}title")
