@@ -1328,18 +1328,29 @@ def rss_proxy():
         return jsonify({"error": "URL invalide"}), 400
 
     try:
-        import requests as _req
-        headers = {
+        import urllib.request as _urlreq
+        import http.cookiejar as _cookiejar
+        import ssl as _ssl
+
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+
+        jar = _cookiejar.CookieJar()
+        opener = _urlreq.build_opener(
+            _urlreq.HTTPSHandler(context=ctx),
+            _urlreq.HTTPCookieProcessor(jar),
+            _urlreq.HTTPRedirectHandler(),
+        )
+        req = _urlreq.Request(raw_url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
             "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
-        }
-        r = _req.get(raw_url, headers=headers, timeout=10, allow_redirects=True)
-        r.raise_for_status()
-        xml_bytes = r.content
+        })
+        with opener.open(req, timeout=10) as resp:
+            xml_bytes = resp.read()
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
