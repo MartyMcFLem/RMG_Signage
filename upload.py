@@ -1319,7 +1319,6 @@ def render_signage_page(page_id):
 def rss_proxy():
     """Proxy RSS : récupère un flux RSS/Atom distant et retourne les titres en JSON.
     Paramètre : url (URL du flux à récupérer)."""
-    import urllib.request as _urlreq
     import xml.etree.ElementTree as _ET
 
     raw_url = request.args.get("url", "").strip()
@@ -1329,13 +1328,18 @@ def rss_proxy():
         return jsonify({"error": "URL invalide"}), 400
 
     try:
-        req = _urlreq.Request(raw_url, headers={
+        import requests as _req
+        headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
             "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
-        })
-        with _urlreq.urlopen(req, timeout=8) as resp:
-            xml_bytes = resp.read()
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
+        r = _req.get(raw_url, headers=headers, timeout=10, allow_redirects=True)
+        r.raise_for_status()
+        xml_bytes = r.content
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
