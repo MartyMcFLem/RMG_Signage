@@ -1330,8 +1330,9 @@ def rss_proxy():
 
     try:
         req = _urlreq.Request(raw_url, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; Feedfetcher-Google; +http://www.google.com/feedfetcher.html)",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
         })
         with _urlreq.urlopen(req, timeout=8) as resp:
             xml_bytes = resp.read()
